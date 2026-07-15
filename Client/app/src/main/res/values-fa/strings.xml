@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kipotify</string>
+    
+    <!-- Tab Names -->
+    <string name="tab_home">خانه</string>
+    <string name="tab_search">جستجو</string>
+    <string name="tab_downloads">دانلودها</string>
+    <string name="tab_playlists">پلی‌لیست‌ها</string>
+    <string name="tab_profile">پروفایل من</string>
+
+    <!-- Home Screen -->
+    <string name="carousel_title">پیشنهادات ویژه</string>
+    <string name="quick_actions">دسترسی سریع</string>
+    <string name="action_liked_songs">آهنگ‌های لایک شده</string>
+    <string name="action_recent">اخیراً شنیده شده</string>
+    <string name="action_my_playlists">پلی‌لیست‌های من</string>
+    <string name="action_top_artists">هنرمندان برتر</string>
+    
+    <string name="section_popular">محبوب‌ترین‌ها</string>
+    <string name="section_new_releases">جدیدترین‌ها</string>
+    <string name="section_global_playlists">پلی‌لیست‌های جهانی</string>
+    <string name="section_local_playlists">پلی‌لیست‌های محلی</string>
+
+    <!-- Search Screen -->
+    <string name="search_hint">جستجوی آهنگ، خواننده، پلی‌لیست…</string>
+    <string name="search_history">تاریخچه جستجو</string>
+    <string name="clear_history">پاک کردن تاریخچه</string>
+    <string name="no_search_results">نتیجه‌ای برای \"%s\" یافت نشد</string>
+    
+    <!-- Search Filter Chips -->
+    <string name="filter_all">همه</string>
+    <string name="filter_songs">آهنگ‌ها</string>
+    <string name="filter_artists">خوانندگان</string>
+    <string name="filter_playlists">پلی‌لیست‌ها</string>
+
+    <!-- Downloads Screen -->
+    <string name="downloads_empty">آهنگ آفلاینی وجود ندارد. برای دانلود حساب خود را ویژه کنید!</string>
+    <string name="downloads_title">آهنگ‌های دانلود شده</string>
+    <string name="downloading_work">در حال دانلود در پس‌زمینه…</string>
+    
+    <!-- Playlists Screen -->
+    <string name="playlists_title">مرکز موسیقی</string>
+    <string name="section_world_music">موسیقی جهان</string>
+    <string name="section_domestic_music">موسیقی داخلی</string>
+    <string name="section_user_playlists">پلی‌لیست‌های کاربر</string>
+    <string name="create_playlist_btn">ساخت پلی‌لیست جدید</string>
+    <string name="playlist_empty">این پلی‌لیست خالی است. آهنگی اضافه کنید!</string>
+
+    <!-- Profile Screen -->
+    <string name="profile_title">پروفایل من</string>
+    <string name="premium_member">عضو ویژه (پرمیوم)</string>
+    <string name="standard_member">کاربر عادی</string>
+    <string name="upgrade_to_premium">ارتقا به حساب ویژه</string>
+    <string name="premium_success_msg">تبریک! حساب شما به عضویت ویژه ارتقا یافت!</string>
+    
+    <!-- Settings -->
+    <string name="settings">تنظیمات</string>
+    <string name="setting_language">زبان برنامه</string>
+    <string name="setting_theme">تم برنامه</string>
+    <string name="theme_light">تم روشن</string>
+    <string name="theme_dark">تم تاریک</string>
+    <string name="theme_system">پیش‌فرض سیستم</string>
+    <string name="logout">خروج از حساب</string>
+
+    <!-- Media Player -->
+    <string name="now_playing">در حال پخش</string>
+    <string name="sleep_timer">تایمر خواب</string>
+    <string name="sleep_timer_set">تایمر خواب برای %d دقیقه دیگر تنظیم شد</string>
+    <string name="sleep_timer_off">تایمر خواب غیرفعال</string>
+    <string name="playback_speed">سرعت پخش</string>
+    
+    <!-- Social Network & Chat -->
+    <string name="social_tab">شبکه اجتماعی</string>
+    <string name="friends_list">لیست دوستان</string>
+    <string name="follow_btn">دنبال کردن</string>
+    <string name="unfollow_btn">لغو دنبال کردن</string>
+    <string name="chat_placeholder">پیام خود را بنویسید…</string>
+    <string name="typing_text">%s در حال نوشتن است…</string>
+    <string name="send_btn">ارسال</string>
+    
+    <!-- Chat Status -->
+    <string name="status_sending">در حال ارسال</string>
+    <string name="status_sent">ارسال شده</string>
+    <string name="status_read">خوانده شده</string>
+    
+    <!-- Dialogs & Prompts -->
+    <string name="premium_required_title">قابلیت ویژه</string>
+    <string name="premium_required_desc">دانلود آهنگ‌ها مخصوص کاربران ویژه است. برای استفاده، هم‌اکنون عضو ویژه شوید!</string>
+    <string name="dismiss">بستن</string>
+    <string name="ok">تایید</string>
+    
+    <string name="empty_state_offline">شما آفلاین هستید. نمایش آهنگ‌های دانلود شده آفلاین.</string>
+    <string name="kipotify_user">کاربر Kipotify</string>
+    <string name="friend_playlist_label">لیست پخش: %s</string>
+</resources>

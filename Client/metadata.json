@@ -1,0 +1,8 @@
+{
+  "name": "Kipotify",
+  "description": "Kipotify is a comprehensive music streaming application and social networking platform. It features offline playback downloads, real-time interactive direct messaging, dynamic layout RTL/LTR localization, custom adaptive graphics, background ExoPlayer playback services, sleep timers, speed modulators, and custom Canvas-rendered wave equalizers.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
