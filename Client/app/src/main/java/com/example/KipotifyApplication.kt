@@ -36,6 +36,11 @@ class KipotifyApplication : Application() {
             messageDao = database.messageDao(),
             trackRepository = trackRepository
         )
-        audioPlayerManager = AudioPlayerManager(this)
+        val attributionContext = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            createAttributionContext("media")
+        } else {
+            this
+        }
+        audioPlayerManager = AudioPlayerManager(attributionContext)
     }
 }
