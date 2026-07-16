@@ -12,18 +12,18 @@ import androidx.compose.ui.unit.sp
 
 // Color Palette Definition - Cosmic Dark & Luxury Light
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFF10B981), // Neon Emerald Green
-    secondary = Color(0xFF06B6D4), // Cyan Highlight
-    tertiary = Color(0xFFF59E0B), // Golden Warm Amber
-    background = Color(0xFF0F172A), // Dark Midnight Obsidian Slate
-    surface = Color(0xFF1E293B), // Charcoal Card Surface
-    onPrimary = Color(0xFF022C22),
-    onSecondary = Color(0xFF083344),
-    onTertiary = Color(0xFF451A03),
-    onBackground = Color(0xFFF1F5F9), // Off-White
-    onSurface = Color(0xFFF1F5F9),
-    surfaceVariant = Color(0xFF334155),
-    onSurfaceVariant = Color(0xFFCBD5E1)
+    primary = Color(0xFF1DB954), // Spotify Vibrant Green
+    secondary = Color(0xFF121824), // Rich Icon Navy Background
+    tertiary = Color(0xFF10B981), // Emerald Accent
+    background = Color(0xFF121824), // Matches Launcher Background (#121824)
+    surface = Color(0xFF1E2530), // Matching Elevated Card Surface
+    onPrimary = Color(0xFF000000),
+    onSecondary = Color(0xFFFFFFFF),
+    onTertiary = Color(0xFFFFFFFF),
+    onBackground = Color(0xFFF3F4F6), // Off-White
+    onSurface = Color(0xFFF3F4F6),
+    surfaceVariant = Color(0xFF2D3748),
+    onSurfaceVariant = Color(0xFFE2E8F0)
 )
 
 private val LightColorScheme = lightColorScheme(
