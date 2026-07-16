@@ -64,6 +64,7 @@ sealed interface KipotifyEvent {
     data class OnToggleFollow(val friendId: String) : KipotifyEvent
     data class OnSendMessage(val content: String, val sharedTrack: Track? = null) : KipotifyEvent
     data class OnOpenChatWithFriend(val friend: Friend?) : KipotifyEvent
+    data class OnSeekTo(val positionMs: Long) : KipotifyEvent
 }
 
 @OptIn(FlowPreview::class)
@@ -274,6 +275,9 @@ class KipotifyViewModel(
             }
             is KipotifyEvent.OnOpenChatWithFriend -> {
                 _uiState.update { it.copy(activeChatFriend = event.friend) }
+            }
+            is KipotifyEvent.OnSeekTo -> {
+                audioPlayerManager.seekTo(event.positionMs)
             }
         }
     }

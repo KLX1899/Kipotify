@@ -42,6 +42,8 @@ class AudioPlayerManager(private val context: Context) {
     private var sleepTimerJob: Job? = null
     private var visualizerJob: Job? = null
     private var positionJob: Job? = null
+    private var isCrossFading = false
+    private var crossFadeJob: Job? = null
 
     init {
         try {
@@ -80,6 +82,15 @@ class AudioPlayerManager(private val context: Context) {
     }
 
     fun playTrack(track: Track) {
+        val player = exoPlayer
+        if (player != null && player.isPlaying && !isCrossFading) {
+            crossFadeTo(track)
+        } else {
+            executeInstantPlay(track)
+        }
+    }
+
+    private fun executeInstantPlay(track: Track) {
         _currentTrack.value = track
         _dominantColor.value = generateDominantColor(track)
         _playbackPosition.value = 0L
@@ -88,6 +99,7 @@ class AudioPlayerManager(private val context: Context) {
         val player = exoPlayer
         if (player != null) {
             try {
+                player.volume = 1.0f
                 player.stop()
                 val mediaItem = MediaItem.fromUri(track.audioUrl)
                 player.setMediaItem(mediaItem)
@@ -105,6 +117,60 @@ class AudioPlayerManager(private val context: Context) {
             _isPlaying.value = true
             startVisualizerSimulation()
             startPositionUpdates()
+        }
+    }
+
+    private fun crossFadeTo(track: Track) {
+        crossFadeJob?.cancel()
+        crossFadeJob = scope.launch {
+            isCrossFading = true
+            val player = exoPlayer
+            if (player != null && player.isPlaying) {
+                // Phase 1: Fade out current track
+                val steps = 8
+                val fadeDuration = 700L
+                val delayTime = fadeDuration / steps
+                for (i in steps downTo 0) {
+                    player.volume = i.toFloat() / steps
+                    delay(delayTime)
+                }
+            }
+
+            // Update current track parameters
+            _currentTrack.value = track
+            _dominantColor.value = generateDominantColor(track)
+            _playbackPosition.value = 0L
+            currentIndex = playlist.indexOfFirst { it.id == track.id }
+
+            if (player != null) {
+                try {
+                    player.stop()
+                    player.volume = 0f
+                    val mediaItem = MediaItem.fromUri(track.audioUrl)
+                    player.setMediaItem(mediaItem)
+                    player.prepare()
+                    player.setPlaybackSpeed(_playbackSpeed.value)
+                    player.playWhenReady = true
+
+                    // Phase 2: Fade in new track
+                    val steps = 8
+                    val fadeDuration = 700L
+                    val delayTime = fadeDuration / steps
+                    for (i in 0..steps) {
+                        player.volume = i.toFloat() / steps
+                        delay(delayTime)
+                    }
+                } catch (e: Exception) {
+                    _isPlaying.value = true
+                    startVisualizerSimulation()
+                    startPositionUpdates()
+                }
+            } else {
+                _isPlaying.value = true
+                startVisualizerSimulation()
+                startPositionUpdates()
+            }
+            isCrossFading = false
         }
     }
 
@@ -183,6 +249,10 @@ class AudioPlayerManager(private val context: Context) {
                 val player = exoPlayer
                 if (player != null) {
                     _playbackPosition.value = player.currentPosition
+                    val duration = player.duration
+                    if (duration > 0 && duration - player.currentPosition < 1800 && !isCrossFading) {
+                        next()
+                    }
                 } else {
                     val maxDuration = (_currentTrack.value?.durationSeconds ?: 180) * 1000L
                     _playbackPosition.value = (_playbackPosition.value + (1000 * _playbackSpeed.value).toLong()).coerceAtMost(maxDuration)

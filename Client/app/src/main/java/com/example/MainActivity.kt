@@ -1289,10 +1289,19 @@ fun NowPlayingScreen(
 
         // Progress Seek Bar
         val maxMs = (track.durationSeconds * 1000L)
+        var draggingPosition by remember { mutableStateOf<Float?>(null) }
+        val currentSliderValue = draggingPosition ?: state.playbackPosition.toFloat()
+
         Column {
             Slider(
-                value = state.playbackPosition.toFloat().coerceAtMost(maxMs.toFloat()),
-                onValueChange = { onEvent(KipotifyEvent.OnSetSleepTimer(0)) /* optional seek slider logic */ },
+                value = currentSliderValue.coerceIn(0f, maxMs.toFloat()),
+                onValueChange = { draggingPosition = it },
+                onValueChangeFinished = {
+                    draggingPosition?.let {
+                        onEvent(KipotifyEvent.OnSeekTo(it.toLong()))
+                    }
+                    draggingPosition = null
+                },
                 valueRange = 0f..maxMs.toFloat(),
                 colors = SliderDefaults.colors(
                     activeTrackColor = MaterialTheme.colorScheme.primary,
@@ -1303,7 +1312,7 @@ fun NowPlayingScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(formatTime(state.playbackPosition), color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+                Text(formatTime(currentSliderValue.toLong()), color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
                 Text(formatTime(maxMs), color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
             }
         }
