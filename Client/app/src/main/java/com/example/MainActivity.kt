@@ -57,6 +57,9 @@ import com.example.data.model.Track
 import com.example.ui.theme.KipotifyTheme
 import com.example.ui.viewmodel.KipotifyEvent
 import com.example.ui.viewmodel.KipotifyUiState
+import android.Manifest
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.example.ui.viewmodel.KipotifyViewModel
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -72,6 +75,16 @@ class MainActivity : ComponentActivity() {
                 factory = KipotifyViewModel.Factory(app)
             )
             val state by viewModel.uiState.collectAsState()
+
+            // Request Notification Permission on Android 13/14+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                val requestPermissionLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission()
+                ) { _ -> }
+                LaunchedEffect(Unit) {
+                    requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
 
             // Dynamic Locale Configuration
             val locale = Locale(state.language)
