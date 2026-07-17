@@ -58,6 +58,7 @@ type Track struct {
 	Genre           string    `json:"genre"`
 	Locale          string    `json:"locale"`
 	DurationSeconds int       `json:"durationSeconds"`
+	Lyric           string    `json:"lyric"`
 	PlayCount       int       `json:"playCount"`
 	DownloadCount   int       `json:"downloadCount"`
 	IsLiked         bool      `json:"isLiked"`

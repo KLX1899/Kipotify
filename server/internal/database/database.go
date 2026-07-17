@@ -82,15 +82,12 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 }
 
 type seedTrack struct {
-	ID              string `json:"id"`
-	Title           string `json:"title"`
-	ArtistName      string `json:"artist_name"`
-	AlbumTitle      string `json:"album_title"`
-	Genre           string `json:"genre"`
-	Locale          string `json:"locale"`
-	CoverImageURL   string `json:"cover_image_url"`
-	AudioURL        string `json:"audio_url"`
-	DurationSeconds int    `json:"duration_seconds"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	ArtistName string `json:"artist_name"`
+	AlbumTitle string `json:"album_title"`
+	Duration   int    `json:"duration"`
+	Lyric      string `json:"lyric"`
 }
 
 func Seed(ctx context.Context, pool *pgxpool.Pool) error {
@@ -141,24 +138,11 @@ func Seed(ctx context.Context, pool *pgxpool.Pool) error {
 		on conflict do nothing`)
 
 	for _, item := range tracks {
-		artistID := fmt.Sprintf("10000000-0000-4000-8000-%012d", stableNum(item.ArtistName))
-		albumID := fmt.Sprintf("20000000-0000-4000-8000-%012d", stableNum(item.AlbumTitle))
-		_, err := tx.Exec(ctx, `insert into artists(id, name, avatar_url, bio) values($1,$2,$3,$4)
-			on conflict(id) do update set name=excluded.name`,
-			artistID, item.ArtistName, item.CoverImageURL, "Seeded public-domain / royalty-free artist profile")
-		if err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `insert into albums(id, title, artist_id, cover_image_url, release_date) values($1,$2,$3,$4,current_date)
-			on conflict(id) do update set title=excluded.title`,
-			albumID, item.AlbumTitle, artistID, item.CoverImageURL)
-		if err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `insert into tracks(id, title, artist_id, album_id, cover_image_url, audio_url, genre, locale, duration_seconds)
-			values($1,$2,$3,$4,$5,$6,$7,$8,$9)
-			on conflict(id) do update set title=excluded.title, audio_url=excluded.audio_url, cover_image_url=excluded.cover_image_url`,
-			item.ID, item.Title, artistID, albumID, item.CoverImageURL, item.AudioURL, item.Genre, item.Locale, item.DurationSeconds)
+		_, err := tx.Exec(ctx, `insert into tracks(id, title, artist_name, album_title, duration, lyric)
+			values($1,$2,$3,$4,$5,$6)
+			on conflict(id) do update set title=excluded.title, artist_name=excluded.artist_name,
+				album_title=excluded.album_title, duration=excluded.duration, lyric=excluded.lyric`,
+			item.ID, item.Title, item.ArtistName, item.AlbumTitle, item.Duration, item.Lyric)
 		if err != nil {
 			return err
 		}
@@ -191,7 +175,7 @@ func Seed(ctx context.Context, pool *pgxpool.Pool) error {
 		switch {
 		case i >= 15 && i < 30:
 			target = "30000000-0000-4000-8000-000000000002"
-		case item.Locale == "fa":
+		case i >= 30 && i < 45:
 			target = "30000000-0000-4000-8000-000000000003"
 		case i%5 == 0:
 			target = "30000000-0000-4000-8000-000000000004"
@@ -211,15 +195,4 @@ func Seed(ctx context.Context, pool *pgxpool.Pool) error {
 		on conflict do nothing`)
 
 	return tx.Commit(ctx)
-}
-
-func stableNum(value string) int {
-	var n int
-	for _, r := range value {
-		n = (n*31 + int(r)) % 999999999999
-	}
-	if n < 1 {
-		return 1
-	}
-	return n
 }

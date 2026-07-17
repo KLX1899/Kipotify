@@ -15,33 +15,13 @@ create table if not exists users (
     updated_at timestamptz not null default now()
 );
 
-create table if not exists artists (
-    id uuid primary key default gen_random_uuid(),
-    name text not null unique,
-    avatar_url text not null default '',
-    bio text not null default '',
-    created_at timestamptz not null default now()
-);
-
-create table if not exists albums (
-    id uuid primary key default gen_random_uuid(),
-    title text not null,
-    artist_id uuid not null references artists(id) on delete cascade,
-    cover_image_url text not null default '',
-    release_date date not null default current_date,
-    created_at timestamptz not null default now()
-);
-
 create table if not exists tracks (
-    id uuid primary key default gen_random_uuid(),
+    id text primary key,
     title text not null,
-    artist_id uuid not null references artists(id) on delete restrict,
-    album_id uuid references albums(id) on delete set null,
-    cover_image_url text not null,
-    audio_url text not null,
-    genre text not null default 'instrumental',
-    locale text not null default 'global',
-    duration_seconds int not null default 180 check (duration_seconds > 0),
+    artist_name text not null,
+    album_title text not null default '',
+    duration int not null default 180 check (duration > 0),
+    lyric text not null default '',
     play_count int not null default 0,
     download_count int not null default 0,
     created_at timestamptz not null default now(),
@@ -62,7 +42,7 @@ create table if not exists playlists (
 
 create table if not exists playlist_tracks (
     playlist_id uuid not null references playlists(id) on delete cascade,
-    track_id uuid not null references tracks(id) on delete cascade,
+    track_id text not null references tracks(id) on delete cascade,
     position int not null default 0,
     added_at timestamptz not null default now(),
     primary key (playlist_id, track_id)
@@ -70,21 +50,21 @@ create table if not exists playlist_tracks (
 
 create table if not exists liked_tracks (
     user_id uuid not null references users(id) on delete cascade,
-    track_id uuid not null references tracks(id) on delete cascade,
+    track_id text not null references tracks(id) on delete cascade,
     created_at timestamptz not null default now(),
     primary key (user_id, track_id)
 );
 
 create table if not exists recently_played (
     user_id uuid not null references users(id) on delete cascade,
-    track_id uuid not null references tracks(id) on delete cascade,
+    track_id text not null references tracks(id) on delete cascade,
     played_at timestamptz not null default now(),
     primary key (user_id, track_id)
 );
 
 create table if not exists downloads (
     user_id uuid not null references users(id) on delete cascade,
-    track_id uuid not null references tracks(id) on delete cascade,
+    track_id text not null references tracks(id) on delete cascade,
     created_at timestamptz not null default now(),
     primary key (user_id, track_id)
 );
@@ -113,19 +93,18 @@ create table if not exists messages (
     receiver_id uuid not null references users(id) on delete cascade,
     content text not null default '',
     status text not null default 'sent' check (status in ('sending','sent','delivered','read')),
-    shared_track_id uuid references tracks(id) on delete set null,
+    shared_track_id text references tracks(id) on delete set null,
     created_at timestamptz not null default now(),
     delivered_at timestamptz,
     read_at timestamptz,
     check (sender_id <> receiver_id)
 );
 
-create index if not exists idx_tracks_artist_created on tracks(artist_id, created_at desc);
-create index if not exists idx_tracks_genre_created on tracks(genre, created_at desc);
-create index if not exists idx_tracks_locale_created on tracks(locale, created_at desc);
+create index if not exists idx_tracks_created on tracks(created_at desc);
 create index if not exists idx_tracks_play_count on tracks(play_count desc, created_at desc);
 create index if not exists idx_tracks_title_trgm on tracks using gin(title gin_trgm_ops);
-create index if not exists idx_artists_name_trgm on artists using gin(name gin_trgm_ops);
+create index if not exists idx_tracks_artist_name_trgm on tracks using gin(artist_name gin_trgm_ops);
+create index if not exists idx_tracks_album_title_trgm on tracks using gin(album_title gin_trgm_ops);
 create index if not exists idx_users_name_trgm on users using gin(name gin_trgm_ops);
 create index if not exists idx_playlists_name_trgm on playlists using gin(name gin_trgm_ops);
 create index if not exists idx_playlist_tracks_lookup on playlist_tracks(playlist_id, position, track_id);

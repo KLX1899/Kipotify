@@ -98,19 +98,7 @@ func (p *Postgres) ListTracks(ctx context.Context, userID string, f domain.Track
 	where, args := []string{"1=1"}, []any{userID}
 	if f.Query != "" {
 		args = append(args, "%"+f.Query+"%")
-		where = append(where, fmt.Sprintf("(t.title ilike $%d or ar.name ilike $%d)", len(args), len(args)))
-	}
-	if f.Genre != "" {
-		args = append(args, f.Genre)
-		where = append(where, fmt.Sprintf("t.genre=$%d", len(args)))
-	}
-	if f.Locale != "" {
-		args = append(args, f.Locale)
-		where = append(where, fmt.Sprintf("t.locale=$%d", len(args)))
-	}
-	if f.ArtistID != "" {
-		args = append(args, f.ArtistID)
-		where = append(where, fmt.Sprintf("t.artist_id=$%d", len(args)))
+		where = append(where, fmt.Sprintf("(t.title ilike $%d or t.artist_name ilike $%d or t.album_title ilike $%d or t.lyric ilike $%d)", len(args), len(args), len(args), len(args)))
 	}
 	order := "t.created_at desc"
 	switch f.Section {
@@ -204,14 +192,15 @@ func (p *Postgres) ListArtists(ctx context.Context, query string, page, limit in
 	args, where := []any{}, "1=1"
 	if query != "" {
 		args = append(args, "%"+query+"%")
-		where = "name ilike $1"
+		where = "artist_name ilike $1"
 	}
 	var total int
-	if err := p.db.QueryRow(ctx, `select count(*) from artists where `+where, args...).Scan(&total); err != nil {
+	if err := p.db.QueryRow(ctx, `select count(distinct artist_name) from tracks where `+where, args...).Scan(&total); err != nil {
 		return domain.Paged[[]domain.Artist]{}, err
 	}
 	args = append(args, limit, offset(page, limit))
-	rows, err := p.db.Query(ctx, `select id::text,name,avatar_url,bio,created_at from artists where `+where+` order by name limit $`+fmt.Sprint(len(args)-1)+` offset $`+fmt.Sprint(len(args)), args...)
+	rows, err := p.db.Query(ctx, `select md5(artist_name),artist_name,'' avatar_url,'' bio,min(created_at)
+		from tracks where `+where+` group by artist_name order by artist_name limit $`+fmt.Sprint(len(args)-1)+` offset $`+fmt.Sprint(len(args)), args...)
 	if err != nil {
 		return domain.Paged[[]domain.Artist]{}, err
 	}
@@ -230,11 +219,12 @@ func (p *Postgres) ListArtists(ctx context.Context, query string, page, limit in
 func (p *Postgres) ListAlbums(ctx context.Context, page, limit int) (domain.Paged[[]domain.Album], error) {
 	page, limit = normalizePage(page, limit)
 	var total int
-	if err := p.db.QueryRow(ctx, `select count(*) from albums`).Scan(&total); err != nil {
+	if err := p.db.QueryRow(ctx, `select count(*) from (select 1 from tracks group by album_title, artist_name) albums`).Scan(&total); err != nil {
 		return domain.Paged[[]domain.Album]{}, err
 	}
-	rows, err := p.db.Query(ctx, `select al.id::text,al.title,al.artist_id::text,ar.name,al.cover_image_url,al.release_date,al.created_at
-		from albums al join artists ar on ar.id=al.artist_id order by al.created_at desc limit $1 offset $2`, limit, offset(page, limit))
+	rows, err := p.db.Query(ctx, `select md5(album_title || ':' || artist_name),album_title,md5(artist_name),artist_name,'' cover_image_url,
+		min(created_at)::date release_date,min(created_at) created_at
+		from tracks group by album_title, artist_name order by min(created_at) desc limit $1 offset $2`, limit, offset(page, limit))
 	if err != nil {
 		return domain.Paged[[]domain.Album]{}, err
 	}
@@ -446,8 +436,7 @@ func (p *Postgres) MarkRead(ctx context.Context, messageID, readerID string) (do
 }
 
 func (p *Postgres) tracksPage(ctx context.Context, userID, where, order string, args []any, page, limit int, extraJoin string) (domain.Paged[[]domain.Track], error) {
-	baseFrom := ` from tracks t join artists ar on ar.id=t.artist_id left join albums al on al.id=t.album_id
-		left join liked_tracks liked on liked.track_id=t.id and liked.user_id=$1
+	baseFrom := ` from tracks t left join liked_tracks liked on liked.track_id=t.id and liked.user_id=$1
 		left join downloads d on d.track_id=t.id and d.user_id=$1` + extraJoin
 	var total int
 	if err := p.db.QueryRow(ctx, `select count(*)`+baseFrom+` where `+where, args...).Scan(&total); err != nil {
@@ -510,21 +499,20 @@ func scanUserWithHash(row pgx.Row) (domain.User, string, error) {
 }
 
 func trackSelect() string {
-	return trackSelectWithFrom(` from tracks t join artists ar on ar.id=t.artist_id left join albums al on al.id=t.album_id
-		left join liked_tracks liked on liked.track_id=t.id and liked.user_id=$1
+	return trackSelectWithFrom(` from tracks t left join liked_tracks liked on liked.track_id=t.id and liked.user_id=$1
 		left join downloads d on d.track_id=t.id and d.user_id=$1`)
 }
 
 func trackSelectWithFrom(from string) string {
-	return `select t.id::text,t.title,t.artist_id::text,ar.name,coalesce(t.album_id::text,''),coalesce(al.title,''),t.cover_image_url,t.audio_url,t.genre,t.locale,
-		t.duration_seconds,t.play_count,t.download_count,(liked.user_id is not null) is_liked,(d.user_id is not null) is_downloaded,t.created_at` + from
+	return `select t.id::text,t.title,'' artist_id,t.artist_name,'' album_id,t.album_title,'' cover_image_url,'' audio_url,'' genre,'' locale,
+		t.duration,t.lyric,t.play_count,t.download_count,(liked.user_id is not null) is_liked,(d.user_id is not null) is_downloaded,t.created_at` + from
 }
 
 func scanTracks(rows pgx.Rows) ([]domain.Track, error) {
 	items := []domain.Track{}
 	for rows.Next() {
 		var item domain.Track
-		if err := rows.Scan(&item.ID, &item.Title, &item.ArtistID, &item.ArtistName, &item.AlbumID, &item.AlbumTitle, &item.CoverImageURL, &item.AudioURL, &item.Genre, &item.Locale, &item.DurationSeconds, &item.PlayCount, &item.DownloadCount, &item.IsLiked, &item.IsDownloaded, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Title, &item.ArtistID, &item.ArtistName, &item.AlbumID, &item.AlbumTitle, &item.CoverImageURL, &item.AudioURL, &item.Genre, &item.Locale, &item.DurationSeconds, &item.Lyric, &item.PlayCount, &item.DownloadCount, &item.IsLiked, &item.IsDownloaded, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -562,12 +550,10 @@ func scanPlaylistRows(rows pgx.Rows) (domain.Playlist, error) {
 
 func messageSelect() string {
 	return `select m.id::text,m.sender_id::text,s.name,m.receiver_id::text,m.content,(extract(epoch from m.created_at)*1000)::bigint,m.status,
-		st.id::text,coalesce(st.title,''),coalesce(ar.name,''),coalesce(st.artist_id::text,''),coalesce(st.album_id::text,''),coalesce(al.title,''),coalesce(st.cover_image_url,''),coalesce(st.audio_url,''),coalesce(st.genre,''),coalesce(st.locale,''),coalesce(st.duration_seconds,0),coalesce(st.play_count,0),coalesce(st.download_count,0),false,false,coalesce(st.created_at,now()),
+		st.id::text,coalesce(st.title,''),coalesce(st.artist_name,''),'' artist_id,'' album_id,coalesce(st.album_title,''),'' cover_image_url,'' audio_url,'' genre,'' locale,coalesce(st.duration,0),coalesce(st.lyric,''),coalesce(st.play_count,0),coalesce(st.download_count,0),false,false,coalesce(st.created_at,now()),
 		m.delivered_at,m.read_at
 		from messages m join users s on s.id=m.sender_id
-		left join tracks st on st.id=m.shared_track_id
-		left join artists ar on ar.id=st.artist_id
-		left join albums al on al.id=st.album_id`
+		left join tracks st on st.id=m.shared_track_id`
 }
 
 func scanMessages(rows pgx.Rows) ([]domain.Message, error) {
@@ -600,7 +586,7 @@ func scanMessageGeneric(row rowScanner) (domain.Message, error) {
 	var track domain.Track
 	var trackID sql.NullString
 	err := row.Scan(&msg.ID, &msg.SenderID, &msg.SenderName, &msg.ReceiverID, &msg.Content, &msg.Timestamp, &msg.Status,
-		&trackID, &track.Title, &track.ArtistName, &track.ArtistID, &track.AlbumID, &track.AlbumTitle, &track.CoverImageURL, &track.AudioURL, &track.Genre, &track.Locale, &track.DurationSeconds, &track.PlayCount, &track.DownloadCount, &track.IsLiked, &track.IsDownloaded, &track.CreatedAt,
+		&trackID, &track.Title, &track.ArtistName, &track.ArtistID, &track.AlbumID, &track.AlbumTitle, &track.CoverImageURL, &track.AudioURL, &track.Genre, &track.Locale, &track.DurationSeconds, &track.Lyric, &track.PlayCount, &track.DownloadCount, &track.IsLiked, &track.IsDownloaded, &track.CreatedAt,
 		&msg.DeliveredAt, &msg.ReadAt)
 	if err != nil {
 		return msg, err
