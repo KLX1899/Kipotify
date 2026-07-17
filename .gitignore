@@ -40,3 +40,15 @@ todo.md
 # musics and lyrics
 TaylorSwift/
 taylor_all_songs.csv
+
+# Server media storage keeps source-controlled placeholders and text lyrics,
+# but actual audio/image binaries should be managed outside git.
+server/media/audio/**
+!server/media/audio/
+!server/media/audio/.gitkeep
+server/media/images/artists/**
+!server/media/images/artists/
+!server/media/images/artists/.gitkeep
+server/media/images/releases/**
+!server/media/images/releases/
+!server/media/images/releases/.gitkeep
