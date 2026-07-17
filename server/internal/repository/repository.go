@@ -98,7 +98,11 @@ func (p *Postgres) ListTracks(ctx context.Context, userID string, f domain.Track
 	where, args := []string{"1=1"}, []any{userID}
 	if f.Query != "" {
 		args = append(args, "%"+f.Query+"%")
-		where = append(where, fmt.Sprintf("(t.title ilike $%d or t.artist_name ilike $%d or t.album_title ilike $%d or t.lyric ilike $%d)", len(args), len(args), len(args), len(args)))
+		where = append(where, fmt.Sprintf("(t.title ilike $%d or coalesce(pa.name, ra.name, t.artist_name) ilike $%d or coalesce(r.title, t.album_title) ilike $%d or t.lyric ilike $%d or t.slug ilike $%d)", len(args), len(args), len(args), len(args), len(args)))
+	}
+	if f.ArtistID != "" {
+		args = append(args, f.ArtistID)
+		where = append(where, fmt.Sprintf("exists(select 1 from track_artists ta_filter where ta_filter.track_id=t.id and ta_filter.artist_id::text=$%d)", len(args)))
 	}
 	order := "t.created_at desc"
 	switch f.Section {
@@ -192,15 +196,17 @@ func (p *Postgres) ListArtists(ctx context.Context, query string, page, limit in
 	args, where := []any{}, "1=1"
 	if query != "" {
 		args = append(args, "%"+query+"%")
-		where = "artist_name ilike $1"
+		where = "(name ilike $1 or slug ilike $1)"
 	}
 	var total int
-	if err := p.db.QueryRow(ctx, `select count(distinct artist_name) from tracks where `+where, args...).Scan(&total); err != nil {
+	if err := p.db.QueryRow(ctx, `select count(*) from artists where `+where, args...).Scan(&total); err != nil {
 		return domain.Paged[[]domain.Artist]{}, err
 	}
 	args = append(args, limit, offset(page, limit))
-	rows, err := p.db.Query(ctx, `select md5(artist_name),artist_name,'' avatar_url,'' bio,min(created_at)
-		from tracks where `+where+` group by artist_name order by artist_name limit $`+fmt.Sprint(len(args)-1)+` offset $`+fmt.Sprint(len(args)), args...)
+	rows, err := p.db.Query(ctx, `select id::text,name,slug,
+		case when profile_image_path = '' or profile_image_path ~ '^https?://' or left(profile_image_path, 1) = '/' then profile_image_path else '/' || profile_image_path end avatar_url,
+		profile_image_path,bio,coalesce(country,''),birth_date,coalesce(active_years,''),created_at
+		from artists where `+where+` order by name limit $`+fmt.Sprint(len(args)-1)+` offset $`+fmt.Sprint(len(args)), args...)
 	if err != nil {
 		return domain.Paged[[]domain.Artist]{}, err
 	}
@@ -208,8 +214,12 @@ func (p *Postgres) ListArtists(ctx context.Context, query string, page, limit in
 	items := []domain.Artist{}
 	for rows.Next() {
 		var item domain.Artist
-		if err := rows.Scan(&item.ID, &item.Name, &item.AvatarURL, &item.Bio, &item.CreatedAt); err != nil {
+		var birthDate sql.NullTime
+		if err := rows.Scan(&item.ID, &item.Name, &item.Slug, &item.AvatarURL, &item.ProfileImagePath, &item.Bio, &item.Country, &birthDate, &item.ActiveYears, &item.CreatedAt); err != nil {
 			return domain.Paged[[]domain.Artist]{}, err
+		}
+		if birthDate.Valid {
+			item.BirthDate = &birthDate.Time
 		}
 		items = append(items, item)
 	}
@@ -219,12 +229,16 @@ func (p *Postgres) ListArtists(ctx context.Context, query string, page, limit in
 func (p *Postgres) ListAlbums(ctx context.Context, page, limit int) (domain.Paged[[]domain.Album], error) {
 	page, limit = normalizePage(page, limit)
 	var total int
-	if err := p.db.QueryRow(ctx, `select count(*) from (select 1 from tracks group by album_title, artist_name) albums`).Scan(&total); err != nil {
+	if err := p.db.QueryRow(ctx, `select count(*) from releases`).Scan(&total); err != nil {
 		return domain.Paged[[]domain.Album]{}, err
 	}
-	rows, err := p.db.Query(ctx, `select md5(album_title || ':' || artist_name),album_title,md5(artist_name),artist_name,'' cover_image_url,
-		min(created_at)::date release_date,min(created_at) created_at
-		from tracks group by album_title, artist_name order by min(created_at) desc limit $1 offset $2`, limit, offset(page, limit))
+	rows, err := p.db.Query(ctx, `select r.id::text,r.title,r.slug,r.release_type,a.id::text,a.name,
+		case when r.cover_image_path = '' or r.cover_image_path ~ '^https?://' or left(r.cover_image_path, 1) = '/' then r.cover_image_path else '/' || r.cover_image_path end cover_image_url,
+		coalesce(r.release_date, r.created_at::date) release_date,
+		(select count(*) from tracks t where t.release_id=r.id)::int track_count,
+		r.created_at
+		from releases r join artists a on a.id=r.primary_artist_id
+		order by r.release_date desc nulls last, r.created_at desc limit $1 offset $2`, limit, offset(page, limit))
 	if err != nil {
 		return domain.Paged[[]domain.Album]{}, err
 	}
@@ -232,7 +246,7 @@ func (p *Postgres) ListAlbums(ctx context.Context, page, limit int) (domain.Page
 	items := []domain.Album{}
 	for rows.Next() {
 		var item domain.Album
-		if err := rows.Scan(&item.ID, &item.Title, &item.ArtistID, &item.ArtistName, &item.CoverImageURL, &item.ReleaseDate, &item.CreatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Title, &item.Slug, &item.ReleaseType, &item.ArtistID, &item.ArtistName, &item.CoverImageURL, &item.ReleaseDate, &item.TrackCount, &item.CreatedAt); err != nil {
 			return domain.Paged[[]domain.Album]{}, err
 		}
 		items = append(items, item)
@@ -436,8 +450,7 @@ func (p *Postgres) MarkRead(ctx context.Context, messageID, readerID string) (do
 }
 
 func (p *Postgres) tracksPage(ctx context.Context, userID, where, order string, args []any, page, limit int, extraJoin string) (domain.Paged[[]domain.Track], error) {
-	baseFrom := ` from tracks t left join liked_tracks liked on liked.track_id=t.id and liked.user_id=$1
-		left join downloads d on d.track_id=t.id and d.user_id=$1` + extraJoin
+	baseFrom := trackFrom(extraJoin)
 	var total int
 	if err := p.db.QueryRow(ctx, `select count(*)`+baseFrom+` where `+where, args...).Scan(&total); err != nil {
 		return domain.Paged[[]domain.Track]{}, err
@@ -499,21 +512,67 @@ func scanUserWithHash(row pgx.Row) (domain.User, string, error) {
 }
 
 func trackSelect() string {
-	return trackSelectWithFrom(` from tracks t left join liked_tracks liked on liked.track_id=t.id and liked.user_id=$1
-		left join downloads d on d.track_id=t.id and d.user_id=$1`)
+	return trackSelectWithFrom(trackFrom(""))
+}
+
+func trackFrom(extraJoin string) string {
+	return ` from tracks t
+		left join releases r on r.id=t.release_id
+		left join artists ra on ra.id=r.primary_artist_id
+		left join lateral (
+			select a.id, a.name, a.profile_image_path
+			from track_artists ta
+			join artists a on a.id=ta.artist_id
+			where ta.track_id=t.id and ta.role='primary'
+			order by ta.position, a.name
+			limit 1
+		) pa on true
+		left join liked_tracks liked on liked.track_id=t.id and liked.user_id=$1
+		left join downloads d on d.track_id=t.id and d.user_id=$1` + extraJoin
 }
 
 func trackSelectWithFrom(from string) string {
-	return `select t.id::text,t.title,'' artist_id,t.artist_name,'' album_id,t.album_title,'' cover_image_url,'' audio_url,'' genre,'' locale,
-		t.duration,t.lyric,t.play_count,t.download_count,(liked.user_id is not null) is_liked,(d.user_id is not null) is_downloaded,t.created_at` + from
+	return `select t.id::text,t.title,coalesce(t.slug,'') slug,
+		coalesce(pa.id::text, ra.id::text, '') artist_id,
+		coalesce(pa.name, ra.name, nullif(t.artist_name, ''), 'Unknown Artist') artist_name,
+		coalesce(r.id::text, '') album_id,
+		coalesce(r.title, nullif(t.album_title, ''), '') album_title,
+		coalesce(r.id::text, '') release_id,
+		coalesce(r.title, nullif(t.album_title, ''), '') release_title,
+		coalesce(r.release_type, '') release_type,
+		case
+			when coalesce(nullif(r.cover_image_path, ''), nullif(pa.profile_image_path, ''), nullif(ra.profile_image_path, ''), '') = '' then ''
+			when coalesce(nullif(r.cover_image_path, ''), nullif(pa.profile_image_path, ''), nullif(ra.profile_image_path, ''), '') ~ '^https?://' then coalesce(nullif(r.cover_image_path, ''), nullif(pa.profile_image_path, ''), nullif(ra.profile_image_path, ''), '')
+			when left(coalesce(nullif(r.cover_image_path, ''), nullif(pa.profile_image_path, ''), nullif(ra.profile_image_path, ''), ''), 1) = '/' then coalesce(nullif(r.cover_image_path, ''), nullif(pa.profile_image_path, ''), nullif(ra.profile_image_path, ''), '')
+			else '/' || coalesce(nullif(r.cover_image_path, ''), nullif(pa.profile_image_path, ''), nullif(ra.profile_image_path, ''), '')
+		end cover_image_url,
+		case
+			when coalesce(nullif(r.cover_image_path, ''), nullif(pa.profile_image_path, ''), nullif(ra.profile_image_path, ''), '') = '' then ''
+			when coalesce(nullif(r.cover_image_path, ''), nullif(pa.profile_image_path, ''), nullif(ra.profile_image_path, ''), '') ~ '^https?://' then coalesce(nullif(r.cover_image_path, ''), nullif(pa.profile_image_path, ''), nullif(ra.profile_image_path, ''), '')
+			when left(coalesce(nullif(r.cover_image_path, ''), nullif(pa.profile_image_path, ''), nullif(ra.profile_image_path, ''), ''), 1) = '/' then coalesce(nullif(r.cover_image_path, ''), nullif(pa.profile_image_path, ''), nullif(ra.profile_image_path, ''), '')
+			else '/' || coalesce(nullif(r.cover_image_path, ''), nullif(pa.profile_image_path, ''), nullif(ra.profile_image_path, ''), '')
+		end fallback_artwork_url,
+		case when t.audio_file_path = '' or t.audio_file_path ~ '^https?://' or left(t.audio_file_path, 1) = '/' then t.audio_file_path else '/' || t.audio_file_path end audio_url,
+		t.audio_file_path,
+		case when t.lyrics_file_path = '' or t.lyrics_file_path ~ '^https?://' or left(t.lyrics_file_path, 1) = '/' then t.lyrics_file_path else '/' || t.lyrics_file_path end lyrics_url,
+		t.lyrics_file_path,
+		t.artwork_source,
+		'' genre,'' locale,
+		coalesce(t.track_number,0),coalesce(t.disc_number,1),t.duration,t.lyric,t.release_date,t.is_explicit,
+		coalesce(array(select a.name from track_artists ta join artists a on a.id=ta.artist_id where ta.track_id=t.id and ta.role='featured' order by ta.position, a.name), '{}') featured_artists,
+		t.play_count,t.download_count,(liked.user_id is not null) is_liked,(d.user_id is not null) is_downloaded,t.created_at` + from
 }
 
 func scanTracks(rows pgx.Rows) ([]domain.Track, error) {
 	items := []domain.Track{}
 	for rows.Next() {
 		var item domain.Track
-		if err := rows.Scan(&item.ID, &item.Title, &item.ArtistID, &item.ArtistName, &item.AlbumID, &item.AlbumTitle, &item.CoverImageURL, &item.AudioURL, &item.Genre, &item.Locale, &item.DurationSeconds, &item.Lyric, &item.PlayCount, &item.DownloadCount, &item.IsLiked, &item.IsDownloaded, &item.CreatedAt); err != nil {
+		var releaseDate sql.NullTime
+		if err := rows.Scan(&item.ID, &item.Title, &item.Slug, &item.ArtistID, &item.ArtistName, &item.AlbumID, &item.AlbumTitle, &item.ReleaseID, &item.ReleaseTitle, &item.ReleaseType, &item.CoverImageURL, &item.FallbackArtwork, &item.AudioURL, &item.AudioFilePath, &item.LyricsURL, &item.LyricsFilePath, &item.ArtworkSource, &item.Genre, &item.Locale, &item.TrackNumber, &item.DiscNumber, &item.DurationSeconds, &item.Lyric, &releaseDate, &item.Explicit, &item.FeaturedArtists, &item.PlayCount, &item.DownloadCount, &item.IsLiked, &item.IsDownloaded, &item.CreatedAt); err != nil {
 			return nil, err
+		}
+		if releaseDate.Valid {
+			item.ReleaseDate = &releaseDate.Time
 		}
 		items = append(items, item)
 	}
@@ -550,10 +609,47 @@ func scanPlaylistRows(rows pgx.Rows) (domain.Playlist, error) {
 
 func messageSelect() string {
 	return `select m.id::text,m.sender_id::text,s.name,m.receiver_id::text,m.content,(extract(epoch from m.created_at)*1000)::bigint,m.status,
-		st.id::text,coalesce(st.title,''),coalesce(st.artist_name,''),'' artist_id,'' album_id,coalesce(st.album_title,''),'' cover_image_url,'' audio_url,'' genre,'' locale,coalesce(st.duration,0),coalesce(st.lyric,''),coalesce(st.play_count,0),coalesce(st.download_count,0),false,false,coalesce(st.created_at,now()),
+		st.id::text,coalesce(st.title,''),coalesce(st.slug,''),
+		coalesce(spa.id::text, sra.id::text, '') artist_id,
+		coalesce(spa.name, sra.name, nullif(st.artist_name, ''), ''),
+		coalesce(sr.id::text, '') album_id,
+		coalesce(sr.title, nullif(st.album_title, ''), '') album_title,
+		coalesce(sr.id::text, '') release_id,
+		coalesce(sr.title, nullif(st.album_title, ''), '') release_title,
+		coalesce(sr.release_type, '') release_type,
+		case
+			when coalesce(nullif(sr.cover_image_path, ''), nullif(spa.profile_image_path, ''), nullif(sra.profile_image_path, ''), '') = '' then ''
+			when coalesce(nullif(sr.cover_image_path, ''), nullif(spa.profile_image_path, ''), nullif(sra.profile_image_path, ''), '') ~ '^https?://' then coalesce(nullif(sr.cover_image_path, ''), nullif(spa.profile_image_path, ''), nullif(sra.profile_image_path, ''), '')
+			when left(coalesce(nullif(sr.cover_image_path, ''), nullif(spa.profile_image_path, ''), nullif(sra.profile_image_path, ''), ''), 1) = '/' then coalesce(nullif(sr.cover_image_path, ''), nullif(spa.profile_image_path, ''), nullif(sra.profile_image_path, ''), '')
+			else '/' || coalesce(nullif(sr.cover_image_path, ''), nullif(spa.profile_image_path, ''), nullif(sra.profile_image_path, ''), '')
+		end cover_image_url,
+		case
+			when coalesce(nullif(sr.cover_image_path, ''), nullif(spa.profile_image_path, ''), nullif(sra.profile_image_path, ''), '') = '' then ''
+			when coalesce(nullif(sr.cover_image_path, ''), nullif(spa.profile_image_path, ''), nullif(sra.profile_image_path, ''), '') ~ '^https?://' then coalesce(nullif(sr.cover_image_path, ''), nullif(spa.profile_image_path, ''), nullif(sra.profile_image_path, ''), '')
+			when left(coalesce(nullif(sr.cover_image_path, ''), nullif(spa.profile_image_path, ''), nullif(sra.profile_image_path, ''), ''), 1) = '/' then coalesce(nullif(sr.cover_image_path, ''), nullif(spa.profile_image_path, ''), nullif(sra.profile_image_path, ''), '')
+			else '/' || coalesce(nullif(sr.cover_image_path, ''), nullif(spa.profile_image_path, ''), nullif(sra.profile_image_path, ''), '')
+		end fallback_artwork_url,
+		case when coalesce(st.audio_file_path, '') = '' or st.audio_file_path ~ '^https?://' or left(st.audio_file_path, 1) = '/' then coalesce(st.audio_file_path, '') else '/' || st.audio_file_path end audio_url,
+		coalesce(st.audio_file_path, ''),
+		case when coalesce(st.lyrics_file_path, '') = '' or st.lyrics_file_path ~ '^https?://' or left(st.lyrics_file_path, 1) = '/' then coalesce(st.lyrics_file_path, '') else '/' || st.lyrics_file_path end lyrics_url,
+		coalesce(st.lyrics_file_path, ''),
+		coalesce(st.artwork_source, 'embedded_audio'),
+		'' genre,'' locale,coalesce(st.track_number,0),coalesce(st.disc_number,1),coalesce(st.duration,0),coalesce(st.lyric,''),st.release_date,coalesce(st.is_explicit,false),
+		coalesce(array(select a.name from track_artists ta join artists a on a.id=ta.artist_id where ta.track_id=st.id and ta.role='featured' order by ta.position, a.name), '{}') featured_artists,
+		coalesce(st.play_count,0),coalesce(st.download_count,0),false,false,coalesce(st.created_at,now()),
 		m.delivered_at,m.read_at
 		from messages m join users s on s.id=m.sender_id
-		left join tracks st on st.id=m.shared_track_id`
+		left join tracks st on st.id=m.shared_track_id
+		left join releases sr on sr.id=st.release_id
+		left join artists sra on sra.id=sr.primary_artist_id
+		left join lateral (
+			select a.id, a.name, a.profile_image_path
+			from track_artists ta
+			join artists a on a.id=ta.artist_id
+			where ta.track_id=st.id and ta.role='primary'
+			order by ta.position, a.name
+			limit 1
+		) spa on true`
 }
 
 func scanMessages(rows pgx.Rows) ([]domain.Message, error) {
@@ -585,14 +681,18 @@ func scanMessageGeneric(row rowScanner) (domain.Message, error) {
 	var msg domain.Message
 	var track domain.Track
 	var trackID sql.NullString
+	var releaseDate sql.NullTime
 	err := row.Scan(&msg.ID, &msg.SenderID, &msg.SenderName, &msg.ReceiverID, &msg.Content, &msg.Timestamp, &msg.Status,
-		&trackID, &track.Title, &track.ArtistName, &track.ArtistID, &track.AlbumID, &track.AlbumTitle, &track.CoverImageURL, &track.AudioURL, &track.Genre, &track.Locale, &track.DurationSeconds, &track.Lyric, &track.PlayCount, &track.DownloadCount, &track.IsLiked, &track.IsDownloaded, &track.CreatedAt,
+		&trackID, &track.Title, &track.Slug, &track.ArtistID, &track.ArtistName, &track.AlbumID, &track.AlbumTitle, &track.ReleaseID, &track.ReleaseTitle, &track.ReleaseType, &track.CoverImageURL, &track.FallbackArtwork, &track.AudioURL, &track.AudioFilePath, &track.LyricsURL, &track.LyricsFilePath, &track.ArtworkSource, &track.Genre, &track.Locale, &track.TrackNumber, &track.DiscNumber, &track.DurationSeconds, &track.Lyric, &releaseDate, &track.Explicit, &track.FeaturedArtists, &track.PlayCount, &track.DownloadCount, &track.IsLiked, &track.IsDownloaded, &track.CreatedAt,
 		&msg.DeliveredAt, &msg.ReadAt)
 	if err != nil {
 		return msg, err
 	}
 	if trackID.Valid && trackID.String != "" {
 		track.ID = trackID.String
+		if releaseDate.Valid {
+			track.ReleaseDate = &releaseDate.Time
+		}
 		msg.SharedTrack = &track
 		msg.SongCard = &domain.SharedTrackCard{ID: track.ID, Title: track.Title, ArtistName: track.ArtistName, CoverImageURL: track.CoverImageURL, AudioURL: track.AudioURL}
 	}

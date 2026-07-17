@@ -29,42 +29,64 @@ type PublicUser struct {
 }
 
 type Artist struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	AvatarURL string    `json:"avatarUrl"`
-	Bio       string    `json:"bio"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID               string     `json:"id"`
+	Name             string     `json:"name"`
+	Slug             string     `json:"slug"`
+	AvatarURL        string     `json:"avatarUrl"`
+	ProfileImagePath string     `json:"profileImagePath"`
+	Bio              string     `json:"bio"`
+	Country          string     `json:"country,omitempty"`
+	BirthDate        *time.Time `json:"birthDate,omitempty"`
+	ActiveYears      string     `json:"activeYears,omitempty"`
+	CreatedAt        time.Time  `json:"createdAt"`
 }
 
 type Album struct {
 	ID            string    `json:"id"`
 	Title         string    `json:"title"`
+	Slug          string    `json:"slug"`
+	ReleaseType   string    `json:"releaseType"`
 	ArtistID      string    `json:"artistId"`
 	ArtistName    string    `json:"artistName"`
 	CoverImageURL string    `json:"coverImageUrl"`
 	ReleaseDate   time.Time `json:"releaseDate"`
+	TrackCount    int       `json:"trackCount"`
 	CreatedAt     time.Time `json:"createdAt"`
 }
 
 type Track struct {
-	ID              string    `json:"id"`
-	Title           string    `json:"title"`
-	ArtistID        string    `json:"artistId,omitempty"`
-	ArtistName      string    `json:"artistName"`
-	AlbumID         string    `json:"albumId,omitempty"`
-	AlbumTitle      string    `json:"albumTitle,omitempty"`
-	CoverImageURL   string    `json:"coverImageUrl"`
-	AudioURL        string    `json:"audioUrl"`
-	Genre           string    `json:"genre"`
-	Locale          string    `json:"locale"`
-	DurationSeconds int       `json:"durationSeconds"`
-	Lyric           string    `json:"lyric"`
-	PlayCount       int       `json:"playCount"`
-	DownloadCount   int       `json:"downloadCount"`
-	IsLiked         bool      `json:"isLiked"`
-	IsDownloaded    bool      `json:"isDownloaded"`
-	LocalFilePath   *string   `json:"localFilePath,omitempty"`
-	CreatedAt       time.Time `json:"createdAt"`
+	ID              string     `json:"id"`
+	Title           string     `json:"title"`
+	Slug            string     `json:"slug"`
+	ArtistID        string     `json:"artistId,omitempty"`
+	ArtistName      string     `json:"artistName"`
+	AlbumID         string     `json:"albumId,omitempty"`
+	AlbumTitle      string     `json:"albumTitle,omitempty"`
+	ReleaseID       string     `json:"releaseId,omitempty"`
+	ReleaseTitle    string     `json:"releaseTitle,omitempty"`
+	ReleaseType     string     `json:"releaseType,omitempty"`
+	CoverImageURL   string     `json:"coverImageUrl"`
+	FallbackArtwork string     `json:"fallbackArtworkUrl"`
+	AudioURL        string     `json:"audioUrl"`
+	AudioFilePath   string     `json:"audioFilePath"`
+	LyricsURL       string     `json:"lyricsUrl,omitempty"`
+	LyricsFilePath  string     `json:"lyricsFilePath,omitempty"`
+	ArtworkSource   string     `json:"artworkSource"`
+	Genre           string     `json:"genre"`
+	Locale          string     `json:"locale"`
+	TrackNumber     int        `json:"trackNumber"`
+	DiscNumber      int        `json:"discNumber"`
+	DurationSeconds int        `json:"durationSeconds"`
+	Lyric           string     `json:"lyric"`
+	ReleaseDate     *time.Time `json:"releaseDate,omitempty"`
+	Explicit        bool       `json:"explicit"`
+	FeaturedArtists []string   `json:"featuredArtists"`
+	PlayCount       int        `json:"playCount"`
+	DownloadCount   int        `json:"downloadCount"`
+	IsLiked         bool       `json:"isLiked"`
+	IsDownloaded    bool       `json:"isDownloaded"`
+	LocalFilePath   *string    `json:"localFilePath,omitempty"`
+	CreatedAt       time.Time  `json:"createdAt"`
 }
 
 type Playlist struct {

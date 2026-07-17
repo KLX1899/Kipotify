@@ -39,6 +39,7 @@ func NewRouter(app *service.App, cfg config.Config) http.Handler {
 	}))
 
 	r.Get("/healthz", h.health)
+	r.Handle("/media/*", http.StripPrefix("/media/", http.FileServer(http.Dir("media"))))
 	r.Post("/api/auth/register", h.register)
 	r.Post("/api/auth/login", h.login)
 	r.Get("/api/ws/chat", h.hub.ServeHTTP)

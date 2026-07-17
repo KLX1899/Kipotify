@@ -231,14 +231,15 @@ Server event types include:
 
 ## Seed Data and Database Notes
 
-The database schema is created by `server/migrations/001_init.sql`. It enables `pgcrypto` for UUID generation and `pg_trgm` for trigram indexes used by search.
+The database schema is created by SQL files in `server/migrations`. It enables `pgcrypto` for UUID generation and `pg_trgm` for trigram indexes used by search.
 
 Main tables:
 
 - `users`
 - `artists`
-- `albums`
+- `releases`
 - `tracks`
+- `track_artists`
 - `playlists`
 - `playlist_tracks`
 - `liked_tracks`
@@ -249,11 +250,34 @@ Main tables:
 - `messages`
 - `schema_migrations`
 
+Music catalog shape:
+
+- `artists` stores artist profiles: `name`, `slug`, short `bio`, `profile_image_path`, optional `country`, optional `birth_date`, optional `active_years`, and timestamps.
+- `releases` stores albums, singles, and EPs using `release_type in ('album','single','ep')`, linked to a primary artist.
+- `tracks` stores songs and relative media paths: `audio_file_path`, optional `lyrics_file_path`, optional `release_id`, track/disc numbers, duration, release date, explicit flag, and `artwork_source`.
+- `track_artists` stores many-to-many credits with `role in ('primary','featured','producer','writer')`.
+
+Artwork convention:
+
+- Playback artwork should be read from embedded audio metadata when `tracks.artwork_source = 'embedded_audio'`.
+- API fallback artwork comes from `releases.cover_image_path`, then `artists.profile_image_path`.
+- No binary audio is stored in the database.
+
+Media files use relative paths under `server/media`:
+
+```text
+server/media/audio/{artist-slug}/{release-slug}/{track-file}.mp3
+server/media/lyrics/{artist-slug}/{release-slug}/{track-file}.lrc
+server/media/images/artists/{artist-slug}.jpg
+server/media/images/releases/{release-slug}.jpg
+```
+
+The server exposes those files at `/media/*`.
+
 When `RUN_SEED=true`, the backend reads `server/seed/tracks.json`. The seed process requires at least 50 tracks and creates:
 
 - Demo users, including `demo@kipotify.local`.
-- Seeded artists and albums derived from track metadata.
-- Seeded tracks.
+- Seeded artists, releases, tracks, and artist credits.
 - Global, local, and user playlists.
 - Playlist-track relationships.
 - Demo follow relationships.
