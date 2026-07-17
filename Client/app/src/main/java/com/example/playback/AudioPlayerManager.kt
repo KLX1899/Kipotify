@@ -1,6 +1,7 @@
 package com.example.playback
 
 import android.content.Context
+import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -101,7 +102,7 @@ class AudioPlayerManager(private val context: Context) {
             try {
                 player.volume = 1.0f
                 player.stop()
-                val mediaItem = MediaItem.fromUri(track.audioUrl)
+                val mediaItem = MediaItem.fromUri(track.playbackUri())
                 player.setMediaItem(mediaItem)
                 player.prepare()
                 player.setPlaybackSpeed(_playbackSpeed.value)
@@ -146,7 +147,7 @@ class AudioPlayerManager(private val context: Context) {
                 try {
                     player.stop()
                     player.volume = 0f
-                    val mediaItem = MediaItem.fromUri(track.audioUrl)
+                    val mediaItem = MediaItem.fromUri(track.playbackUri())
                     player.setMediaItem(mediaItem)
                     player.prepare()
                     player.setPlaybackSpeed(_playbackSpeed.value)
@@ -229,6 +230,15 @@ class AudioPlayerManager(private val context: Context) {
             }
             // Sleep timer expired, pause music
             pause()
+        }
+    }
+
+    private fun Track.playbackUri(): Uri {
+        val localFile = localFilePath?.let(::File)
+        return if (localFile != null && localFile.exists()) {
+            Uri.fromFile(localFile)
+        } else {
+            Uri.parse(audioUrl)
         }
     }
 

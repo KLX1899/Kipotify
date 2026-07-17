@@ -12,6 +12,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     defaultConfig {
@@ -25,8 +26,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "KIPOTIFY_BASE_URL", "\"http://10.0.2.2:18080/\"")
+        }
         release {
             isMinifyEnabled = false
+            buildConfigField("String", "KIPOTIFY_BASE_URL", "\"http://10.0.2.2:18080/\"")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -70,6 +75,7 @@ dependencies {
     // Retrofit
     implementation(libs.retrofit.core)
     implementation(libs.retrofit.kotlinx.serialization)
+    implementation(libs.okhttp)
 
     // Media3 (ExoPlayer + MediaSession)
     implementation(libs.androidx.media3.exoplayer)

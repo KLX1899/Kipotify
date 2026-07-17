@@ -3,6 +3,9 @@ package com.example
 import android.app.Application
 import com.example.data.local.KipotifyDatabase
 import com.example.data.local.SettingsManager
+import com.example.data.remote.KipotifyApiClient
+import com.example.data.remote.KipotifyApiService
+import com.example.data.repository.AuthRepository
 import com.example.data.repository.SocialRepository
 import com.example.data.repository.TrackRepository
 import com.example.playback.AudioPlayerManager
@@ -12,6 +15,12 @@ class KipotifyApplication : Application() {
         private set
 
     lateinit var settingsManager: SettingsManager
+        private set
+
+    lateinit var apiService: KipotifyApiService
+        private set
+
+    lateinit var authRepository: AuthRepository
         private set
 
     lateinit var trackRepository: TrackRepository
@@ -27,14 +36,20 @@ class KipotifyApplication : Application() {
         super.onCreate()
         database = KipotifyDatabase.getDatabase(this)
         settingsManager = SettingsManager(this)
+        apiService = KipotifyApiClient.create(settingsManager)
+        authRepository = AuthRepository(
+            api = apiService,
+            settingsManager = settingsManager
+        )
         trackRepository = TrackRepository(
             context = this,
+            api = apiService,
             likedSongDao = database.likedSongDao(),
             downloadedSongDao = database.downloadedSongDao()
         )
         socialRepository = SocialRepository(
-            messageDao = database.messageDao(),
-            trackRepository = trackRepository
+            api = apiService,
+            messageDao = database.messageDao()
         )
         val attributionContext = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             createAttributionContext("media")

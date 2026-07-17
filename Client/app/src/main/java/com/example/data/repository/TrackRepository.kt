@@ -1,176 +1,223 @@
 package com.example.data.repository
 
 import android.content.Context
+import com.example.BuildConfig
 import com.example.data.local.daos.DownloadedSongDao
 import com.example.data.local.daos.LikedSongDao
 import com.example.data.local.entities.DownloadedSongEntity
 import com.example.data.local.entities.LikedSongEntity
 import com.example.data.model.Track
+import com.example.data.remote.KipotifyApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 
 class TrackRepository(
     private val context: Context,
+    private val api: KipotifyApiService,
     private val likedSongDao: LikedSongDao,
     private val downloadedSongDao: DownloadedSongDao
 ) {
-    // Generate at least 50 realistic tracks with real-world names across various genres (Persian & International)
-    private val baseTracks: List<Track> = generate50Tracks()
+    private val remoteTracks = MutableStateFlow<List<Track>>(emptyList())
 
     fun getTracksFlow(): Flow<List<Track>> {
         val likedFlow = likedSongDao.getAllLikedSongs()
         val downloadedFlow = downloadedSongDao.getAllDownloadedSongs()
 
-        return combine(likedFlow, downloadedFlow) { likedList, downloadedList ->
+        return combine(remoteTracks, likedFlow, downloadedFlow) { tracks, likedList, downloadedList ->
             val likedIds = likedList.map { it.id }.toSet()
             val downloadedMap = downloadedList.associate { it.id to it.localFilePath }
+            val sourceTracks = tracks.ifEmpty { cachedTracks(likedList, downloadedList) }
 
-            baseTracks.map { track ->
+            sourceTracks.map { track ->
                 track.copy(
-                    isLiked = likedIds.contains(track.id),
-                    isDownloaded = downloadedMap.containsKey(track.id),
-                    localFilePath = downloadedMap[track.id]
+                    isLiked = track.isLiked || likedIds.contains(track.id),
+                    isDownloaded = track.isDownloaded || downloadedMap.containsKey(track.id),
+                    localFilePath = downloadedMap[track.id] ?: track.localFilePath
                 )
             }
         }
     }
 
-    suspend fun toggleLike(trackId: String) = withContext(Dispatchers.IO) {
-        val track = baseTracks.find { it.id == trackId } ?: return@withContext
-        val isCurrentlyLiked = likedSongDao.isSongLiked(trackId)
-        if (isCurrentlyLiked) {
-            likedSongDao.deleteLikedSong(
-                LikedSongEntity(
-                    id = track.id,
-                    title = track.title,
-                    artistName = track.artistName,
-                    coverImageUrl = track.coverImageUrl,
-                    audioUrl = track.audioUrl
-                )
+    private fun cachedTracks(
+        likedList: List<LikedSongEntity>,
+        downloadedList: List<DownloadedSongEntity>
+    ): List<Track> {
+        val likedTracks = likedList.associate { liked ->
+            liked.id to Track(
+                id = liked.id,
+                title = liked.title,
+                artistName = liked.artistName,
+                coverImageUrl = liked.coverImageUrl,
+                audioUrl = liked.audioUrl,
+                isLiked = true
             )
-        } else {
-            likedSongDao.insertLikedSong(
-                LikedSongEntity(
-                    id = track.id,
-                    title = track.title,
-                    artistName = track.artistName,
-                    coverImageUrl = track.coverImageUrl,
-                    audioUrl = track.audioUrl
-                )
+        }
+        val downloadedTracks = downloadedList.associate { downloaded ->
+            downloaded.id to Track(
+                id = downloaded.id,
+                title = downloaded.title,
+                artistName = downloaded.artistName,
+                coverImageUrl = downloaded.coverImageUrl,
+                audioUrl = downloaded.localFilePath,
+                isDownloaded = true,
+                localFilePath = downloaded.localFilePath
             )
+        }
+        return (likedTracks + downloadedTracks).values.toList()
+    }
+
+    suspend fun refreshTracks(search: String? = null, genre: String? = null): Result<List<Track>> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                api.getTracks(genre = genre, search = search)
+                    .map(::normalizeTrackUrls)
+                    .also { remoteTracks.value = it }
+            }
+        }
+
+    suspend fun getTrackById(trackId: String): Result<Track> = withContext(Dispatchers.IO) {
+        runCatching {
+            api.getTrackById(trackId).let(::normalizeTrackUrls)
         }
     }
 
-    suspend fun downloadTrack(trackId: String, onProgress: (Int) -> Unit = {}): Boolean = withContext(Dispatchers.IO) {
-        val track = baseTracks.find { it.id == trackId } ?: return@withContext false
-        
-        // Simulating robust background network download
-        for (progress in 10..100 step 15) {
-            kotlinx.coroutines.delay(200)
-            onProgress(progress)
+    suspend fun toggleLike(trackId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        runCatching {
+            val response = api.toggleLikeTrack(trackId)
+            val track = remoteTracks.value.firstOrNull { it.id == trackId } ?: api.getTrackById(trackId).let(::normalizeTrackUrls)
+            if (response.isLiked) {
+                likedSongDao.insertLikedSong(
+                    LikedSongEntity(
+                        id = track.id,
+                        title = track.title,
+                        artistName = track.artistName,
+                        coverImageUrl = track.coverImageUrl,
+                        audioUrl = track.audioUrl
+                    )
+                )
+            } else {
+                likedSongDao.deleteLikedSong(
+                    LikedSongEntity(
+                        id = track.id,
+                        title = track.title,
+                        artistName = track.artistName,
+                        coverImageUrl = track.coverImageUrl,
+                        audioUrl = track.audioUrl
+                    )
+                )
+            }
+            remoteTracks.value = remoteTracks.value.map {
+                if (it.id == trackId) it.copy(isLiked = response.isLiked) else it
+            }
+            response.isLiked
         }
-        
-        // Save track to local mock files cache
-        val localDir = File(context.cacheDir, "offline_tracks")
+    }
+
+    suspend fun recordPlay(trackId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            api.recordTrackPlay(trackId)
+            remoteTracks.value = remoteTracks.value.map {
+                if (it.id == trackId) it.copy(playCount = it.playCount + 1) else it
+            }
+        }
+    }
+
+    suspend fun canDownload(trackId: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        runCatching { api.getDownloadEligibility(trackId).canDownload }
+    }
+
+    suspend fun downloadTrack(trackId: String, onProgress: (Int) -> Unit = {}): Boolean = withContext(Dispatchers.IO) {
+        val track = remoteTracks.value.firstOrNull { it.id == trackId } ?: getTrackById(trackId).getOrNull() ?: return@withContext false
+        val eligible = canDownload(trackId).getOrDefault(false)
+        if (!eligible) return@withContext false
+
+        val localDir = File(context.filesDir, "offline_tracks")
         if (!localDir.exists()) localDir.mkdirs()
-        val mockLocalFile = File(localDir, "${track.id}.mp3")
-        if (!mockLocalFile.exists()) {
-            mockLocalFile.writeText("MOCK_MP3_DATA_${track.title}")
+        val localFile = File(localDir, "${track.id}.mp3")
+
+        val success = runCatching {
+            downloadAudio(track.audioUrl, localFile, onProgress)
+            api.logTrackDownload(trackId)
+        }.isSuccess
+
+        if (!success) {
+            if (localFile.exists()) localFile.delete()
+            return@withContext false
         }
 
         downloadedSongDao.insertDownloadedSong(
             DownloadedSongEntity(
                 id = track.id,
-                localFilePath = mockLocalFile.absolutePath,
+                localFilePath = localFile.absolutePath,
                 title = track.title,
                 artistName = track.artistName,
                 coverImageUrl = track.coverImageUrl
             )
         )
+        remoteTracks.value = remoteTracks.value.map {
+            if (it.id == trackId) it.copy(isDownloaded = true, localFilePath = localFile.absolutePath) else it
+        }
         onProgress(100)
-        return@withContext true
+        true
     }
 
     suspend fun removeDownload(trackId: String) = withContext(Dispatchers.IO) {
         downloadedSongDao.deleteDownloadedSong(trackId)
-        val file = File(context.cacheDir, "offline_tracks/$trackId.mp3")
+        val file = File(context.filesDir, "offline_tracks/$trackId.mp3")
         if (file.exists()) file.delete()
+        remoteTracks.value = remoteTracks.value.map {
+            if (it.id == trackId) it.copy(isDownloaded = false, localFilePath = null) else it
+        }
     }
 
-    private fun generate50Tracks(): List<Track> {
-        val tracks = mutableListOf<Track>()
-        
-        // Curated sound helix tracks (extremely stable sample audios)
-        val audioUrls = listOf(
-            "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-            "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-            "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
-            "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
-            "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
-            "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
-            "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3",
-            "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"
-        )
-
-        // Music illustration covers from Unsplash
-        val coverImages = listOf(
-            "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400",
-            "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400",
-            "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400",
-            "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400",
-            "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400",
-            "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400",
-            "https://images.unsplash.com/photo-1487180142328-0c4e37023af5?w=400",
-            "https://images.unsplash.com/photo-1516280440614-37939bbacd6a?w=400"
-        )
-
-        val persianArtists = listOf(
-            "همایون شجریان", "محمدرضا شجریان", "شادمهر عقیلی", "یاس", "سوگند", 
-            "علیرضا قربانی", "سیروان خسروی", "محسن یگانه", "سالار عقیلی", "بابک جهانبخش"
-        )
-        val persianSongs = listOf(
-            "آرایش غلیظ", "مرغ سحر", "تقدیر", "سفارشی", "شکوفه", 
-            "روزگار غریب", "دوست دارم", "بهت قول میدم", "وطنم", "من و بارون"
-        )
-
-        val intArtists = listOf(
-            "Chopin", "Vivaldi", "Daft Punk", "Hans Zimmer", "Ludovico Einaudi",
-            "Adele", "Coldplay", "Billie Eilish", "The Weeknd", "Dua Lipa"
-        )
-        val intSongs = listOf(
-            "Nocturne Op. 9", "Spring (Four Seasons)", "Get Lucky", "Time (Inception)", "Nuvole Bianche",
-            "Someone Like You", "Yellow", "Bad Guy", "Blinding Lights", "Levitating"
-        )
-
-        // Generate 50 unique tracks (25 Persian, 25 International)
-        for (i in 1..50) {
-            val isPersian = i % 2 == 1
-            val title: String
-            val artist: String
-            if (isPersian) {
-                val index = (i / 2) % persianSongs.size
-                title = persianSongs[index] + " - ${1 + (i / 20)}"
-                artist = persianArtists[index]
-            } else {
-                val index = (i / 2 - 1) % intSongs.size
-                title = intSongs[index] + " - Part ${1 + (i / 20)}"
-                artist = intArtists[index]
-            }
-
-            tracks.add(
-                Track(
-                    id = "track_$i",
-                    title = title,
-                    artistName = artist,
-                    coverImageUrl = coverImages[i % coverImages.size],
-                    audioUrl = audioUrls[i % audioUrls.size],
-                    durationSeconds = 120 + (i * 7) % 180
-                )
-            )
+    private fun downloadAudio(audioUrl: String, targetFile: File, onProgress: (Int) -> Unit) {
+        val connection = URL(audioUrl).openConnection() as HttpURLConnection
+        connection.connectTimeout = 10_000
+        connection.readTimeout = 30_000
+        connection.connect()
+        if (connection.responseCode !in 200..299) {
+            throw IllegalStateException("Download failed with HTTP ${connection.responseCode}")
         }
-        return tracks
+
+        val totalBytes = connection.contentLengthLong
+        connection.inputStream.use { input ->
+            targetFile.outputStream().use { output ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                var downloaded = 0L
+                var read = input.read(buffer)
+                while (read >= 0) {
+                    output.write(buffer, 0, read)
+                    downloaded += read
+                    if (totalBytes > 0) {
+                        onProgress(((downloaded * 100) / totalBytes).toInt().coerceIn(1, 99))
+                    }
+                    read = input.read(buffer)
+                }
+            }
+        }
+        connection.disconnect()
+    }
+
+    private fun normalizeTrackUrls(track: Track): Track {
+        return track.copy(
+            coverImageUrl = absoluteMediaUrl(track.coverImageUrl),
+            fallbackArtworkUrl = absoluteMediaUrl(track.fallbackArtworkUrl),
+            audioUrl = absoluteMediaUrl(track.audioUrl),
+            lyricsUrl = absoluteMediaUrl(track.lyricsUrl)
+        )
+    }
+
+    private fun absoluteMediaUrl(value: String): String {
+        if (value.isBlank() || value.startsWith("http://") || value.startsWith("https://") || value.startsWith("file://")) {
+            return value
+        }
+        val base = BuildConfig.KIPOTIFY_BASE_URL.trimEnd('/')
+        return if (value.startsWith("/")) "$base$value" else "$base/$value"
     }
 }

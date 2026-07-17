@@ -13,6 +13,13 @@ import retrofit2.http.*
  */
 interface KipotifyApiService {
 
+    // --- Auth Endpoints ---
+    @POST("api/auth/register")
+    suspend fun register(@Body request: RegisterRequest): AuthResponse
+
+    @POST("api/auth/login")
+    suspend fun login(@Body request: LoginRequest): AuthResponse
+
     // --- Tracks & Playlists Endpoints ---
     @GET("api/tracks")
     suspend fun getTracks(
@@ -29,12 +36,21 @@ interface KipotifyApiService {
     @POST("api/tracks/{id}/download")
     suspend fun logTrackDownload(@Path("id") trackId: String): DownloadLogResponse
 
+    @POST("api/tracks/{id}/play")
+    suspend fun recordTrackPlay(@Path("id") trackId: String): SuccessResponse
+
+    @GET("api/downloads/eligibility/{trackId}")
+    suspend fun getDownloadEligibility(@Path("trackId") trackId: String): DownloadEligibilityResponse
+
     // --- User & Premium Subscription Endpoints ---
     @GET("api/user/profile")
     suspend fun getUserProfile(): UserProfileResponse
 
     @POST("api/user/premium/upgrade")
     suspend fun upgradeToPremium(): PremiumUpgradeResponse
+
+    @GET("api/user/settings")
+    suspend fun getUserSettings(): UserSettingsResponse
 
     @PUT("api/user/settings")
     suspend fun updateUserSettings(@Body settings: UserSettingsRequest): SettingsUpdateResponse
@@ -63,6 +79,25 @@ interface KipotifyApiService {
 // --- Request and Response Data Models ---
 
 @Serializable
+data class RegisterRequest(
+    val name: String,
+    val email: String,
+    val password: String
+)
+
+@Serializable
+data class LoginRequest(
+    val email: String,
+    val password: String
+)
+
+@Serializable
+data class AuthResponse(
+    val token: String,
+    val user: UserProfileResponse
+)
+
+@Serializable
 data class LikeResponse(
     val trackId: String,
     val isLiked: Boolean
@@ -77,11 +112,18 @@ data class DownloadLogResponse(
 
 @Serializable
 data class UserProfileResponse(
-    val userId: String,
+    val userId: String = "",
+    val id: String = "",
     val name: String,
     val email: String,
+    val avatarUrl: String = "",
     val isPremium: Boolean,
-    val language: String
+    val premiumExpiresAt: String? = null,
+    val language: String = "en",
+    val theme: String = "system",
+    val followersCount: Int = 0,
+    val followingCount: Int = 0,
+    val createdAt: String = ""
 )
 
 @Serializable
@@ -98,10 +140,28 @@ data class UserSettingsRequest(
 )
 
 @Serializable
+data class UserSettingsResponse(
+    val language: String = "en",
+    val theme: String = "system"
+)
+
+@Serializable
 data class SettingsUpdateResponse(
     val success: Boolean,
     val language: String,
     val theme: String
+)
+
+@Serializable
+data class DownloadEligibilityResponse(
+    val trackId: String,
+    val canDownload: Boolean,
+    val isPremium: Boolean
+)
+
+@Serializable
+data class SuccessResponse(
+    val success: Boolean
 )
 
 @Serializable

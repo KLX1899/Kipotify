@@ -10,11 +10,11 @@ import com.example.data.local.entities.SearchHistoryEntity
 import com.example.data.model.Friend
 import com.example.data.model.Message
 import com.example.data.model.Track
+import com.example.data.repository.AuthRepository
 import com.example.data.repository.SocialRepository
 import com.example.data.repository.TrackRepository
 import com.example.playback.AudioPlayerManager
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -32,6 +32,8 @@ data class KipotifyUiState(
     val chatMessages: List<Message> = emptyList(),
     val activeChatFriend: Friend? = null,
     val downloadingProgress: Map<String, Int> = emptyMap(),
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
     
     // Player values
     val currentTrack: Track? = null,
@@ -72,6 +74,7 @@ class KipotifyViewModel(
     application: Application,
     private val trackRepository: TrackRepository,
     private val socialRepository: SocialRepository,
+    private val authRepository: AuthRepository,
     private val audioPlayerManager: AudioPlayerManager,
     private val settingsManager: com.example.data.local.SettingsManager,
     private val database: com.example.data.local.KipotifyDatabase
@@ -81,9 +84,10 @@ class KipotifyViewModel(
     val uiState: StateFlow<KipotifyUiState> = _uiState.asStateFlow()
 
     private val _searchDebouncedFlow = MutableStateFlow("")
-    private var searchJob: Job? = null
 
     init {
+        refreshStartupData()
+
         // Observe tracks
         viewModelScope.launch {
             trackRepository.getTracksFlow().collect { list ->
@@ -177,11 +181,31 @@ class KipotifyViewModel(
         viewModelScope.launch {
             _searchDebouncedFlow
                 .debounce(500)
-                .filter { it.isNotBlank() }
                 .collect { query ->
-                    database.searchHistoryDao().insertSearch(SearchHistoryEntity(query = query))
+                    if (query.isNotBlank()) {
+                        database.searchHistoryDao().insertSearch(SearchHistoryEntity(query = query))
+                    }
+                    trackRepository.refreshTracks(search = query.takeIf { it.isNotBlank() })
+                        .onFailure { showTransientError("Could not refresh tracks.") }
                 }
         }
+    }
+
+    private fun refreshStartupData() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            authRepository.refreshProfile()
+                .onFailure { showTransientError("Backend is offline or profile could not load.") }
+            trackRepository.refreshTracks()
+                .onFailure { showTransientError("Backend is offline or tracks could not load.") }
+            socialRepository.refreshFriends()
+                .onFailure { showTransientError("Friends could not load.") }
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    private fun showTransientError(message: String) {
+        _uiState.update { it.copy(errorMessage = message) }
     }
 
     fun onEvent(event: KipotifyEvent) {
@@ -191,6 +215,9 @@ class KipotifyViewModel(
             }
             is KipotifyEvent.OnPlayTrack -> {
                 audioPlayerManager.setPlaylist(event.list, event.list.indexOfFirst { it.id == event.track.id })
+                viewModelScope.launch {
+                    trackRepository.recordPlay(event.track.id)
+                }
             }
             KipotifyEvent.OnTogglePlay -> {
                 if (_uiState.value.isPlaying) {
@@ -204,6 +231,7 @@ class KipotifyViewModel(
             is KipotifyEvent.OnToggleLike -> {
                 viewModelScope.launch {
                     trackRepository.toggleLike(event.trackId)
+                        .onFailure { showTransientError("Could not update like.") }
                 }
             }
             is KipotifyEvent.OnDownloadTrack -> {
@@ -215,7 +243,7 @@ class KipotifyViewModel(
                 _uiState.value = _uiState.value.copy(downloadingProgress = progressMap)
 
                 viewModelScope.launch {
-                    trackRepository.downloadTrack(event.trackId) { progress ->
+                    val success = trackRepository.downloadTrack(event.trackId) { progress ->
                         val currentMap = _uiState.value.downloadingProgress.toMutableMap()
                         if (progress >= 100) {
                             currentMap.remove(event.trackId)
@@ -223,6 +251,12 @@ class KipotifyViewModel(
                             currentMap[event.trackId] = progress
                         }
                         _uiState.update { it.copy(downloadingProgress = currentMap) }
+                    }
+                    if (!success) {
+                        val currentMap = _uiState.value.downloadingProgress.toMutableMap()
+                        currentMap.remove(event.trackId)
+                        _uiState.update { it.copy(downloadingProgress = currentMap) }
+                        showTransientError("Could not download this track.")
                     }
                 }
             }
@@ -249,13 +283,26 @@ class KipotifyViewModel(
                 }
             }
             KipotifyEvent.OnUpgradePremium -> {
-                settingsManager.setPremium(true)
+                viewModelScope.launch {
+                    runCatching {
+                        val result = applicationApiUpgrade()
+                        if (result) settingsManager.setPremium(true)
+                    }.onFailure {
+                        showTransientError("Could not upgrade premium.")
+                    }
+                }
             }
             is KipotifyEvent.OnSetLanguage -> {
                 settingsManager.setLanguage(event.lang)
+                viewModelScope.launch {
+                    updateBackendSettings(event.lang, _uiState.value.theme)
+                }
             }
             is KipotifyEvent.OnSetTheme -> {
                 settingsManager.setTheme(event.theme)
+                viewModelScope.launch {
+                    updateBackendSettings(_uiState.value.language, event.theme)
+                }
             }
             is KipotifyEvent.OnSetSleepTimer -> {
                 audioPlayerManager.setSleepTimer(event.minutes)
@@ -266,19 +313,43 @@ class KipotifyViewModel(
             is KipotifyEvent.OnToggleFollow -> {
                 viewModelScope.launch {
                     socialRepository.toggleFollowFriend(event.friendId)
+                        .onFailure { showTransientError("Could not update follow.") }
                 }
             }
             is KipotifyEvent.OnSendMessage -> {
                 viewModelScope.launch {
                     socialRepository.sendMessage(event.content, event.sharedTrack)
+                        .onFailure { showTransientError("Could not send message.") }
                 }
             }
             is KipotifyEvent.OnOpenChatWithFriend -> {
                 _uiState.update { it.copy(activeChatFriend = event.friend) }
+                viewModelScope.launch {
+                    socialRepository.openChat(event.friend)
+                }
             }
             is KipotifyEvent.OnSeekTo -> {
                 audioPlayerManager.seekTo(event.positionMs)
             }
+        }
+    }
+
+    private suspend fun applicationApiUpgrade(): Boolean {
+        val app = getApplication<KipotifyApplication>()
+        val response = app.apiService.upgradeToPremium()
+        authRepository.refreshProfile()
+        return response.success
+    }
+
+    private suspend fun updateBackendSettings(language: String, theme: String) {
+        val app = getApplication<KipotifyApplication>()
+        runCatching {
+            app.apiService.updateUserSettings(
+                com.example.data.remote.UserSettingsRequest(language = language, theme = theme)
+            )
+            authRepository.refreshProfile()
+        }.onFailure {
+            showTransientError("Could not sync settings.")
         }
     }
 
@@ -290,6 +361,7 @@ class KipotifyViewModel(
                     application = application,
                     trackRepository = application.trackRepository,
                     socialRepository = application.socialRepository,
+                    authRepository = application.authRepository,
                     audioPlayerManager = application.audioPlayerManager,
                     settingsManager = application.settingsManager,
                     database = application.database

@@ -18,6 +18,9 @@ class SettingsManager(context: Context) {
     private val _isPremium = MutableStateFlow(prefs.getBoolean("is_premium", false))
     val isPremium: StateFlow<Boolean> = _isPremium.asStateFlow()
 
+    private val _authToken = MutableStateFlow(prefs.getString("auth_token", null))
+    val authToken: StateFlow<String?> = _authToken.asStateFlow()
+
     private val _fontSize = MutableStateFlow(prefs.getFloat("font_size", 16f))
     val fontSize: StateFlow<Float> = _fontSize.asStateFlow()
 
@@ -35,6 +38,19 @@ class SettingsManager(context: Context) {
         prefs.edit().putBoolean("is_premium", premiumValue).apply()
         _isPremium.value = premiumValue
     }
+
+    fun setAuthToken(token: String?) {
+        prefs.edit().apply {
+            if (token.isNullOrBlank()) {
+                remove("auth_token")
+            } else {
+                putString("auth_token", token)
+            }
+        }.apply()
+        _authToken.value = token?.takeIf { it.isNotBlank() }
+    }
+
+    fun getAuthToken(): String? = _authToken.value
 
     fun setFontSize(size: Float) {
         prefs.edit().putFloat("font_size", size).apply()
