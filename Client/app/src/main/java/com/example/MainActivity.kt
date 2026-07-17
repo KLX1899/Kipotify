@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -143,7 +144,7 @@ fun AppShell(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Image(
@@ -153,11 +154,12 @@ fun AppShell(
                                 .size(36.dp)
                                 .clip(RoundedCornerShape(8.dp))
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = stringResource(id = R.string.app_name),
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onBackground
                         )
                     }
                 },
@@ -176,7 +178,7 @@ fun AppShell(
                             Icon(
                                 imageVector = Icons.Default.Notifications,
                                 contentDescription = "Social Hub",
-                                tint = MaterialTheme.colorScheme.onBackground
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -187,18 +189,20 @@ fun AppShell(
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = "Settings",
-                            tint = MaterialTheme.colorScheme.onBackground
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background.copy(alpha = 0.96f),
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface
                 )
             )
         },
         bottomBar = {
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
                 windowInsets = WindowInsets.navigationBars
             ) {
                 NavigationBarItem(
@@ -387,27 +391,31 @@ fun HomeTab(
             .verticalScroll(scrollState)
             .padding(bottom = 80.dp) // space for mini player
     ) {
-        // Suggested Featured Slider (Draggable Horizontal Row with sliding transition)
-        Text(
-            text = stringResource(R.string.carousel_title),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(16.dp)
-        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (state.tracks.isEmpty()) {
+            EmptyStateView(
+                icon = Icons.Default.MusicNote,
+                message = stringResource(R.string.playlist_empty),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 320.dp)
+            )
+            return@Column
+        }
+
+        SectionHeader(title = stringResource(R.string.carousel_title))
         FeaturedCarousel(tracks = state.tracks.take(5), onEvent = onEvent)
 
-        // Quick Actions Grid (4 stylish buttons)
-        Text(
-            text = stringResource(R.string.quick_actions),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+        SectionHeader(
+            title = stringResource(R.string.quick_actions),
+            modifier = Modifier.padding(top = 8.dp)
         )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             QuickActionButton(
                 title = stringResource(R.string.action_liked_songs),
@@ -424,12 +432,12 @@ fun HomeTab(
                 onClick = { onCategorySelect("Recent") }
             )
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(12.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             QuickActionButton(
                 title = stringResource(R.string.action_my_playlists),
@@ -470,11 +478,12 @@ fun QuickActionButton(
     onClick: () -> Unit
 ) {
     Card(
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)),
         onClick = onClick,
         modifier = modifier
-            .height(60.dp)
+            .height(68.dp)
             .shadowScale()
     ) {
         Row(
@@ -489,12 +498,12 @@ fun QuickActionButton(
                     .background(backgroundColor, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = title, tint = Color.White, modifier = Modifier.size(20.dp))
+                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
             }
             Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -508,53 +517,63 @@ fun FeaturedCarousel(
     tracks: List<Track>,
     onEvent: (KipotifyEvent) -> Unit
 ) {
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        items(tracks) { track ->
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier
-                    .width(300.dp)
-                    .height(160.dp)
-                    .shadowScale(),
-                onClick = { onEvent(KipotifyEvent.OnPlayTrack(track, tracks)) }
-            ) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    AsyncImage(
-                        model = track.coverImageUrl,
-                        contentDescription = track.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                    // Dark linear gradient overlay for title contrast
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val cardWidth = (maxWidth - 32.dp).coerceAtMost(360.dp)
+
+        LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            items(tracks, key = { it.id }) { track ->
+                Card(
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier
+                        .width(cardWidth)
+                        .height(172.dp)
+                        .shadowScale(),
+                    onClick = { onEvent(KipotifyEvent.OnPlayTrack(track, tracks)) }
+                ) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AsyncImage(
+                            model = track.coverImageUrl,
+                            contentDescription = track.title,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.Transparent,
+                                            Color.Black.copy(alpha = 0.82f)
+                                        )
+                                    )
                                 )
+                        )
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(18.dp)
+                        ) {
+                            Text(
+                                text = track.title,
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                    )
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(16.dp)
-                    ) {
-                        Text(
-                            text = track.title,
-                            color = Color.White,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = track.artistName,
-                            color = Color.White.copy(alpha = 0.8f),
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                            Text(
+                                text = track.artistName,
+                                color = Color.White.copy(alpha = 0.82f),
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
@@ -568,35 +587,28 @@ fun HomeTrackRow(
     tracks: List<Track>,
     onEvent: (KipotifyEvent) -> Unit
 ) {
-    Column(modifier = Modifier.padding(vertical = 16.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
-        )
+    Column(modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) {
+        SectionHeader(title = title, compact = true)
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            items(tracks) { track ->
+            items(tracks, key = { it.id }) { track ->
                 Column(
                     modifier = Modifier
-                        .width(120.dp)
+                        .width(132.dp)
+                        .clip(MaterialTheme.shapes.large)
                         .clickable { onEvent(KipotifyEvent.OnPlayTrack(track, tracks)) }
+                        .padding(6.dp)
                 ) {
-                    AsyncImage(
-                        model = track.coverImageUrl,
-                        contentDescription = track.title,
-                        modifier = Modifier
-                            .size(120.dp)
-                            .clip(RoundedCornerShape(12.dp)),
-                        contentScale = ContentScale.Crop
+                    TrackArtwork(
+                        track = track,
+                        modifier = Modifier.size(120.dp)
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = track.title,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -690,10 +702,11 @@ fun SearchTab(
                     }
                 }
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(state.searchHistory) { query ->
+                    items(state.searchHistory, key = { it }) { query ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(MaterialTheme.shapes.large)
                                 .clickable { onEvent(KipotifyEvent.OnSearchQueryChanged(query)) }
                                 .padding(horizontal = 16.dp, vertical = 12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -702,7 +715,7 @@ fun SearchTab(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     Icons.Default.Refresh,
-                                    contentDescription = "History",
+                                    contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -710,7 +723,12 @@ fun SearchTab(
                                 Text(query, style = MaterialTheme.typography.bodyLarge)
                             }
                             IconButton(onClick = { onEvent(KipotifyEvent.OnDeleteSearchHistory(query)) }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color.Gray, modifier = Modifier.size(18.dp))
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         }
                     }
@@ -740,8 +758,11 @@ fun SearchTab(
                     message = stringResource(R.string.no_search_results, state.searchQuery)
                 )
             } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(filteredTracks) { track ->
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 12.dp)
+                ) {
+                    items(filteredTracks, key = { it.id }) { track ->
                         TrackListItem(
                             track = track,
                             onPlay = { onEvent(KipotifyEvent.OnPlayTrack(track, filteredTracks)) },
@@ -763,17 +784,15 @@ fun DownloadsTab(
     val downloadedTracks = state.tracks.filter { it.isDownloaded }
 
     Column(modifier = Modifier.fillMaxSize().padding(bottom = 80.dp)) {
-        Text(
-            text = stringResource(R.string.downloads_title),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(16.dp)
-        )
+        SectionHeader(title = stringResource(R.string.downloads_title))
 
         if (downloadedTracks.isEmpty()) {
             EmptyStateView(
                 icon = Icons.Outlined.KeyboardArrowDown,
-                message = stringResource(R.string.downloads_empty)
+                message = stringResource(R.string.downloads_empty),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
             )
             // Add a shortcut upgrade button for non-premium
             if (!state.isPremium) {
@@ -790,8 +809,11 @@ fun DownloadsTab(
             // Show downloading queues if active
             if (state.downloadingProgress.isNotEmpty()) {
                 Card(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = MaterialTheme.shapes.large,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
@@ -804,44 +826,24 @@ fun DownloadsTab(
                 }
             }
 
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 12.dp)
+            ) {
                 items(downloadedTracks, key = { it.id }) { track ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 6.dp)
-                            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(12.dp)),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { onEvent(KipotifyEvent.OnPlayTrack(track, downloadedTracks)) }
-                                .padding(12.dp)
-                        ) {
-                            AsyncImage(
-                                model = track.coverImageUrl,
-                                contentDescription = track.title,
-                                modifier = Modifier
-                                    .size(50.dp)
-                                    .clip(RoundedCornerShape(8.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1)
-                                Text(track.artistName, style = MaterialTheme.typography.bodySmall, color = Color.Gray, maxLines = 1)
+                    TrackListItem(
+                        track = track,
+                        onPlay = { onEvent(KipotifyEvent.OnPlayTrack(track, downloadedTracks)) },
+                        trailingContent = {
+                            IconButton(onClick = { onEvent(KipotifyEvent.OnRemoveDownload(track.id)) }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete Offline",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
                             }
                         }
-                        IconButton(
-                            onClick = { onEvent(KipotifyEvent.OnRemoveDownload(track.id)) },
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete Offline", tint = Color.Red)
-                        }
-                    }
+                    )
                 }
             }
         }
@@ -864,22 +866,12 @@ fun PlaylistsTab(
     )
 
     Column(modifier = Modifier.fillMaxSize().padding(bottom = 80.dp)) {
-        Text(
-            text = stringResource(R.string.playlists_title),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(16.dp)
-        )
+        SectionHeader(title = stringResource(R.string.playlists_title))
 
-        Text(
-            text = stringResource(R.string.section_world_music),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-        )
+        SectionHeader(title = stringResource(R.string.section_world_music), compact = true)
 
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+            columns = GridCells.Adaptive(minSize = 156.dp),
             contentPadding = PaddingValues(16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -888,8 +880,9 @@ fun PlaylistsTab(
             items(genres) { genre ->
                 Card(
                     modifier = Modifier
-                        .height(100.dp)
+                        .height(112.dp)
                         .shadowScale(),
+                    shape = MaterialTheme.shapes.large,
                     onClick = { onCategorySelect(genre.first) }
                 ) {
                     Box(
@@ -902,11 +895,21 @@ fun PlaylistsTab(
                             )
                             .padding(12.dp)
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.LibraryMusic,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.72f),
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(28.dp)
+                        )
                         Text(
                             text = genre.first,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.align(Alignment.BottomStart)
                         )
                     }
@@ -965,7 +968,7 @@ fun ProfileTab(
         Text(
             text = if (state.isPremium) stringResource(R.string.premium_member) else stringResource(R.string.standard_member),
             style = MaterialTheme.typography.bodyMedium,
-            color = if (state.isPremium) Color(0xFFF59E0B) else Color.Gray,
+            color = if (state.isPremium) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.SemiBold
         )
 
@@ -975,7 +978,8 @@ fun ProfileTab(
         if (!state.isPremium) {
             Card(
                 modifier = Modifier.fillMaxWidth().shadowScale(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                shape = MaterialTheme.shapes.large,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
                 onClick = { onEvent(KipotifyEvent.OnUpgradePremium) }
             ) {
                 Row(
@@ -992,10 +996,24 @@ fun ProfileTab(
                     }
                     Spacer(modifier = Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.upgrade_to_premium), fontWeight = FontWeight.Bold)
-                        Text("عضویت طلایی برای دانلودها", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text(
+                            stringResource(R.string.upgrade_to_premium),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Text(
+                            stringResource(R.string.premium_required_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.78f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
-                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Arrow")
+                    Icon(
+                        Icons.Default.KeyboardArrowUp,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(20.dp))
@@ -1004,6 +1022,7 @@ fun ProfileTab(
         // Settings Block
         Card(
             modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large,
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
@@ -1016,8 +1035,16 @@ fun ProfileTab(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(stringResource(R.string.setting_language))
-                    Row {
+                    Text(
+                        stringResource(R.string.setting_language),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Row(
+                        modifier = Modifier
+                            .weight(1.4f)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.End
+                    ) {
                         FilterChip(
                             selected = state.language == "fa",
                             onClick = { onEvent(KipotifyEvent.OnSetLanguage("fa")) },
@@ -1040,8 +1067,22 @@ fun ProfileTab(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(stringResource(R.string.setting_theme))
-                    Row {
+                    Text(
+                        stringResource(R.string.setting_theme),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Row(
+                        modifier = Modifier
+                            .weight(1.4f)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        FilterChip(
+                            selected = state.theme == "system",
+                            onClick = { onEvent(KipotifyEvent.OnSetTheme("system")) },
+                            label = { Text(stringResource(R.string.theme_system)) }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                         FilterChip(
                             selected = state.theme == "dark",
                             onClick = { onEvent(KipotifyEvent.OnSetTheme("dark")) },
@@ -1082,7 +1123,9 @@ fun CategoryDetailView(
 
     Column(modifier = Modifier.fillMaxSize().padding(bottom = 80.dp)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
@@ -1098,8 +1141,11 @@ fun CategoryDetailView(
                 message = stringResource(R.string.playlist_empty)
             )
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(tracks) { track ->
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 12.dp)
+            ) {
+                items(tracks, key = { it.id }) { track ->
                     TrackListItem(
                         track = track,
                         onPlay = { onEvent(KipotifyEvent.OnPlayTrack(track, tracks)) },
@@ -1125,29 +1171,26 @@ fun MiniPlayer(
     val track = state.currentTrack ?: return
 
     Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)),
+        onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .height(64.dp)
+            .height(72.dp)
             .shadowScale()
-            .clickable(onClick = onClick)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 8.dp),
+                .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AsyncImage(
-                model = track.coverImageUrl,
-                contentDescription = track.title,
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop
+            TrackArtwork(
+                track = track,
+                modifier = Modifier.size(52.dp)
             )
-            Spacer(modifier = Modifier.width(10.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = track.title,
@@ -1159,7 +1202,7 @@ fun MiniPlayer(
                 Text(
                     text = track.artistName,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -1211,16 +1254,22 @@ fun NowPlayingScreen(
         radius = 1200f
     )
 
-    Column(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundBrush)
             .statusBarsPadding()
             .navigationBarsPadding()
-            .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+            .padding(24.dp)
     ) {
+        val discSize = (maxWidth - 48.dp).coerceIn(220.dp, 280.dp)
+        val coverSize = discSize * 0.58f
+
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
         // Header
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1244,7 +1293,7 @@ fun NowPlayingScreen(
         // Animated Rotating Vinyl CD Disc
         Box(
             modifier = Modifier
-                .size(240.dp)
+                .size(discSize)
                 .rotate(actualAngle)
                 .drawBehind {
                     // Draw outer black grooves
@@ -1259,7 +1308,7 @@ fun NowPlayingScreen(
                 model = track.coverImageUrl,
                 contentDescription = track.title,
                 modifier = Modifier
-                    .size(140.dp)
+                    .size(coverSize)
                     .clip(CircleShape)
                     .border(4.dp, Color.Black, CircleShape),
                 contentScale = ContentScale.Crop
@@ -1280,14 +1329,18 @@ fun NowPlayingScreen(
                 color = Color.White,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = track.artistName,
                 color = Color.White.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
 
@@ -1340,7 +1393,7 @@ fun NowPlayingScreen(
                 Text(text = "${state.playbackSpeed}x", color = Color.White, fontWeight = FontWeight.Bold)
             }
             IconButton(onClick = { onEvent(KipotifyEvent.OnPrevTrack) }) {
-                Icon(Icons.Default.SkipPrevious, contentDescription = "Prev", tint = Color.White, modifier = Modifier.size(36.dp))
+                Icon(Icons.Default.SkipPrevious, contentDescription = "Previous Track", tint = Color.White, modifier = Modifier.size(36.dp))
             }
             IconButton(
                 onClick = { onEvent(KipotifyEvent.OnTogglePlay) },
@@ -1351,7 +1404,7 @@ fun NowPlayingScreen(
                 Icon(
                     imageVector = if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = "Play/Pause",
-                    tint = Color.Black,
+                    tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(32.dp)
                 )
             }
@@ -1366,6 +1419,7 @@ fun NowPlayingScreen(
                 )
             }
         }
+        }
     }
 }
 
@@ -1375,6 +1429,7 @@ fun AudioVisualizerCanvas(
     isPlaying: Boolean,
     modifier: Modifier
 ) {
+    val barColor = MaterialTheme.colorScheme.primary
     Canvas(modifier = modifier) {
         val spacing = size.width / (waves.size * 2)
         val barWidth = spacing * 1.2f
@@ -1386,7 +1441,7 @@ fun AudioVisualizerCanvas(
             val x = i * (barWidth + spacing) + spacing
 
             drawRoundRect(
-                color = Color(0xFF10B981),
+                color = barColor,
                 topLeft = Offset(x, centerY - barHeight / 2),
                 size = Size(barWidth, barHeight),
                 cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
@@ -1482,13 +1537,18 @@ fun SocialChatHub(
                                         Spacer(modifier = Modifier.width(16.dp))
                                         Column {
                                             Text(friend.name, fontWeight = FontWeight.Bold)
-                                            Text(stringResource(R.string.friend_playlist_label, friend.publicPlaylistName), style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                            Text(
+                                                stringResource(R.string.friend_playlist_label, friend.publicPlaylistName),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
                                         }
                                     }
                                     Button(
                                         onClick = { onEvent(KipotifyEvent.OnToggleFollow(friend.id)) },
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = if (friend.isFollowing) Color.Gray else MaterialTheme.colorScheme.primary
+                                            containerColor = if (friend.isFollowing) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary,
+                                            contentColor = if (friend.isFollowing) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimary
                                         )
                                     ) {
                                         Text(if (friend.isFollowing) stringResource(R.string.unfollow_btn) else stringResource(R.string.follow_btn))
@@ -1512,11 +1572,11 @@ fun SocialChatHub(
                                         val isMe = msg.senderId == "me"
                                         val alignment = if (isMe) Alignment.CenterEnd else Alignment.CenterStart
                                         val containerCol = if (isMe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                                        val labelCol = if (isMe) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                                        val labelCol = if (isMe) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
 
                                         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = alignment) {
                                             Card(
-                                                shape = RoundedCornerShape(12.dp),
+                                                shape = MaterialTheme.shapes.large,
                                                 colors = CardDefaults.cardColors(containerColor = containerCol),
                                                 modifier = Modifier.widthIn(max = 280.dp)
                                             ) {
@@ -1543,7 +1603,12 @@ fun SocialChatHub(
                                                                 Spacer(modifier = Modifier.width(8.dp))
                                                                 Column {
                                                                     Text(msg.sharedTrack.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall, maxLines = 1)
-                                                                    Text(msg.sharedTrack.artistName, style = MaterialTheme.typography.bodySmall, color = Color.Gray, maxLines = 1)
+                                                                    Text(
+                                                                        msg.sharedTrack.artistName,
+                                                                        style = MaterialTheme.typography.bodySmall,
+                                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                        maxLines = 1
+                                                                    )
                                                                 }
                                                             }
                                                         }
@@ -1565,7 +1630,7 @@ fun SocialChatHub(
                                                                 "sent" -> Icons.Default.Check
                                                                 else -> Icons.Default.Check // read double ticks simulation
                                                             }
-                                                            Icon(checkIcon, contentDescription = msg.status, tint = if (msg.status == "read") Color.Cyan else labelCol.copy(alpha = 0.6f), modifier = Modifier.size(12.dp))
+                                                            Icon(checkIcon, contentDescription = msg.status, tint = if (msg.status == "read") MaterialTheme.colorScheme.tertiary else labelCol.copy(alpha = 0.6f), modifier = Modifier.size(12.dp))
                                                         }
                                                     }
                                                 }
@@ -1605,7 +1670,7 @@ fun SocialChatHub(
                                         },
                                         modifier = Modifier.background(MaterialTheme.colorScheme.primary, CircleShape)
                                     ) {
-                                        Icon(Icons.Default.Send, contentDescription = "Send", tint = Color.Black)
+                                        Icon(Icons.Default.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.onPrimary)
                                     }
                                 }
                             }
@@ -1625,34 +1690,61 @@ fun SocialChatHub(
 fun TrackListItem(
     track: Track,
     onPlay: () -> Unit,
-    onLike: () -> Unit
+    onLike: (() -> Unit)? = null,
+    trailingContent: (@Composable RowScope.() -> Unit)? = null
 ) {
+    val shape = MaterialTheme.shapes.large
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surface)
+            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)), shape)
             .clickable(onClick = onPlay)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 10.dp)
+            .heightIn(min = 64.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AsyncImage(
-            model = track.coverImageUrl,
-            contentDescription = track.title,
-            modifier = Modifier
-                .size(56.dp)
-                .clip(RoundedCornerShape(8.dp)),
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.width(16.dp))
+        TrackArtwork(track = track, modifier = Modifier.size(56.dp))
+        Spacer(modifier = Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(track.title, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(track.artistName, style = MaterialTheme.typography.bodySmall, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        IconButton(onClick = onLike) {
-            Icon(
-                imageVector = if (track.isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                contentDescription = "Like Song",
-                tint = if (track.isLiked) Color.Red else Color.Gray
+            Text(
+                track.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+            Text(
+                track.artistName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Row(
+            modifier = Modifier.padding(start = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            when {
+                trailingContent != null -> trailingContent()
+                onLike != null -> {
+                    val likeTint by animateColorAsState(
+                        targetValue = if (track.isLiked) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        label = "Like Tint"
+                    )
+                    IconButton(onClick = onLike) {
+                        Icon(
+                            imageVector = if (track.isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "Like Song",
+                            tint = likeTint
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -1660,10 +1752,11 @@ fun TrackListItem(
 @Composable
 fun EmptyStateView(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    message: String
+    message: String,
+    modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1672,13 +1765,13 @@ fun EmptyStateView(
         Icon(
             imageVector = icon,
             contentDescription = "Empty",
-            tint = Color.Gray.copy(alpha = 0.5f),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
             modifier = Modifier.size(64.dp)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = message,
-            color = Color.Gray,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyLarge
         )
@@ -1691,7 +1784,51 @@ fun formatTime(milliseconds: Long): String {
     return String.format("%d:%02d", minutes, seconds)
 }
 
-fun Modifier.shadowScale(): Modifier = this // custom decorative helper
+@Composable
+fun SectionHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
+) {
+    Text(
+        text = title,
+        style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = modifier.padding(
+            start = 16.dp,
+            end = 16.dp,
+            top = if (compact) 8.dp else 16.dp,
+            bottom = if (compact) 8.dp else 12.dp
+        )
+    )
+}
+
+@Composable
+fun TrackArtwork(
+    track: Track,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(MaterialTheme.shapes.small)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        AsyncImage(
+            model = track.coverImageUrl,
+            contentDescription = track.title,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+    }
+}
+
+@Composable
+fun Modifier.shadowScale(): Modifier = this.shadow(
+    elevation = 6.dp,
+    shape = MaterialTheme.shapes.large,
+    clip = false
+)
 
 // ==========================================
 // CUSTOM SPLASH LOADING SCREEN
@@ -1809,7 +1946,7 @@ fun SplashScreen(onTimeout: () -> Unit) {
                 style = MaterialTheme.typography.displaySmall,
                 color = Color.White,
                 fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.5.sp
+                letterSpacing = 0.sp
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -1817,7 +1954,7 @@ fun SplashScreen(onTimeout: () -> Unit) {
             Text(
                 text = "Social Music Universe",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.LightGray.copy(alpha = 0.7f),
+                color = Color.White.copy(alpha = 0.72f),
                 fontWeight = FontWeight.Medium
             )
 
