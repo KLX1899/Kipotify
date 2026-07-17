@@ -30,20 +30,19 @@ cd server
 go mod download
 ```
 
-### Environment Setup
+### Environment
 
-Copy the backend environment template:
+The Docker Compose quick start works without a local `.env` file. For local overrides, copy the template:
 
 ```bash
-cd server
 cp .env.example .env
 ```
 
 Default backend environment variables:
 
 ```env
-PORT=8080
-DATABASE_URL=postgres://kipotify:kipotify@localhost:5432/kipotify?sslmode=disable
+PORT=18080
+DATABASE_URL=postgres://kipotify:kipotify@localhost:15432/kipotify?sslmode=disable
 JWT_SECRET=replace-with-a-long-random-secret
 JWT_ISSUER=kipotify
 JWT_TTL_HOURS=168
@@ -67,13 +66,13 @@ Or run PostgreSQL with Docker Compose and start the Go server locally:
 ```bash
 cd server
 docker compose up -d postgres
-go run ./cmd/server
+PORT=18080 DATABASE_URL=postgres://kipotify:kipotify@localhost:15432/kipotify?sslmode=disable go run ./cmd/server
 ```
 
-The backend listens on `http://localhost:8080` by default. Health check:
+The Docker quick start publishes the backend at `http://localhost:18080`. Health check:
 
 ```bash
-curl http://localhost:8080/healthz
+curl http://localhost:18080/healthz
 ```
 
 ### Running the Project
