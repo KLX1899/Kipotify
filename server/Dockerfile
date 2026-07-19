@@ -11,6 +11,8 @@ RUN adduser -D -H kipotify
 COPY --from=build /out/kipotify /app/kipotify
 COPY migrations /app/migrations
 COPY seed /app/seed
+COPY media /app/media
+RUN chown -R kipotify:kipotify /app && chmod -R u=rwX,g=rX,o=rX /app/migrations /app/seed /app/media
 USER kipotify
 EXPOSE 8080
 ENTRYPOINT ["/app/kipotify"]

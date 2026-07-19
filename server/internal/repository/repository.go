@@ -429,10 +429,11 @@ func (p *Postgres) ListMessages(ctx context.Context, userID, friendID string, be
 }
 
 func (p *Postgres) CreateMessage(ctx context.Context, senderID, receiverID, content string, sharedTrackID *string) (domain.Message, error) {
-	row := p.db.QueryRow(ctx, `with inserted as (
-		insert into messages(sender_id,receiver_id,content,shared_track_id,status) values($1,$2,$3,$4,'sent') returning id
-	) `+messageSelect()+` join inserted i on i.id=m.id`, senderID, receiverID, content, sharedTrackID)
-	return scanMessage(row)
+	var messageID string
+	if err := p.db.QueryRow(ctx, `insert into messages(sender_id,receiver_id,content,shared_track_id,status) values($1,$2,$3,$4,'sent') returning id::text`, senderID, receiverID, content, sharedTrackID).Scan(&messageID); err != nil {
+		return domain.Message{}, err
+	}
+	return p.messageByID(ctx, messageID)
 }
 
 func (p *Postgres) MarkDelivered(ctx context.Context, messageID, receiverID string) (domain.Message, error) {
@@ -447,6 +448,10 @@ func (p *Postgres) MarkRead(ctx context.Context, messageID, readerID string) (do
 		update messages set status='read', delivered_at=coalesce(delivered_at,now()), read_at=coalesce(read_at,now())
 		where id=$1 and receiver_id=$2 returning id
 	) `+messageSelect()+` join updated u on u.id=m.id`, messageID, readerID))
+}
+
+func (p *Postgres) messageByID(ctx context.Context, messageID string) (domain.Message, error) {
+	return scanMessage(p.db.QueryRow(ctx, messageSelect()+` where m.id=$1`, messageID))
 }
 
 func (p *Postgres) tracksPage(ctx context.Context, userID, where, order string, args []any, page, limit int, extraJoin string) (domain.Paged[[]domain.Track], error) {

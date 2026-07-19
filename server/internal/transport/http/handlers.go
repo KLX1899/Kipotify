@@ -130,7 +130,7 @@ func (h *Handler) compatTracks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, result.Data)
+	writeJSON(w, http.StatusOK, compatTracks(result.Data))
 }
 
 func (h *Handler) tracks(w http.ResponseWriter, r *http.Request) {
@@ -156,7 +156,7 @@ func (h *Handler) track(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, track)
+	writeJSON(w, http.StatusOK, compatTrack(track))
 }
 
 func (h *Handler) toggleLike(w http.ResponseWriter, r *http.Request) {
@@ -259,9 +259,7 @@ func (h *Handler) profile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"userId": user.ID, "id": user.ID, "name": user.Name, "email": user.Email, "avatarUrl": user.AvatarURL,
-		"isPremium": user.IsPremium, "premiumExpiresAt": user.PremiumExpires, "language": user.Language,
-		"theme": user.Theme, "followersCount": user.FollowersCount, "followingCount": user.FollowingCount,
+		"userId": user.ID, "name": user.Name, "email": user.Email, "isPremium": user.IsPremium, "language": user.Language,
 	})
 }
 
@@ -330,7 +328,7 @@ func (h *Handler) friends(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, result.Data)
+	writeJSON(w, http.StatusOK, compatFriends(result.Data))
 }
 
 func (h *Handler) users(w http.ResponseWriter, r *http.Request) {
@@ -365,7 +363,7 @@ func (h *Handler) messages(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, msgs)
+	writeJSON(w, http.StatusOK, compatMessages(msgs))
 }
 
 func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
@@ -383,7 +381,104 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.hub.SendTo(chi.URLParam(r, "friendId"), "message.created", msg)
-	writeJSON(w, http.StatusCreated, msg)
+	writeJSON(w, http.StatusCreated, compatMessage(msg))
+}
+
+type compatTrackDTO struct {
+	ID              string  `json:"id"`
+	Title           string  `json:"title"`
+	ArtistName      string  `json:"artistName"`
+	CoverImageURL   string  `json:"coverImageUrl"`
+	AudioURL        string  `json:"audioUrl"`
+	IsLiked         bool    `json:"isLiked"`
+	IsDownloaded    bool    `json:"isDownloaded"`
+	LocalFilePath   *string `json:"localFilePath"`
+	DurationSeconds int     `json:"durationSeconds"`
+}
+
+type compatFriendDTO struct {
+	ID                 string           `json:"id"`
+	Name               string           `json:"name"`
+	AvatarURL          string           `json:"avatarUrl"`
+	IsFollowing        bool             `json:"isFollowing"`
+	PublicPlaylistName string           `json:"publicPlaylistName"`
+	PublicTracks       []compatTrackDTO `json:"publicTracks"`
+}
+
+type compatMessageDTO struct {
+	ID          string          `json:"id"`
+	SenderID    string          `json:"senderId"`
+	SenderName  string          `json:"senderName"`
+	Content     string          `json:"content"`
+	Timestamp   int64           `json:"timestamp"`
+	Status      string          `json:"status"`
+	SharedTrack *compatTrackDTO `json:"sharedTrack"`
+}
+
+func compatTrack(track domain.Track) compatTrackDTO {
+	return compatTrackDTO{
+		ID:              track.ID,
+		Title:           track.Title,
+		ArtistName:      track.ArtistName,
+		CoverImageURL:   track.CoverImageURL,
+		AudioURL:        track.AudioURL,
+		IsLiked:         track.IsLiked,
+		IsDownloaded:    track.IsDownloaded,
+		LocalFilePath:   track.LocalFilePath,
+		DurationSeconds: track.DurationSeconds,
+	}
+}
+
+func compatTracks(tracks []domain.Track) []compatTrackDTO {
+	out := make([]compatTrackDTO, 0, len(tracks))
+	for _, track := range tracks {
+		out = append(out, compatTrack(track))
+	}
+	return out
+}
+
+func compatFriends(users []domain.PublicUser) []compatFriendDTO {
+	out := make([]compatFriendDTO, 0, len(users))
+	for _, user := range users {
+		playlist := user.PublicPlaylistName
+		if playlist == "" {
+			playlist = "Vibe Zone"
+		}
+		out = append(out, compatFriendDTO{
+			ID:                 user.ID,
+			Name:               user.Name,
+			AvatarURL:          user.AvatarURL,
+			IsFollowing:        user.IsFollowing,
+			PublicPlaylistName: playlist,
+			PublicTracks:       []compatTrackDTO{},
+		})
+	}
+	return out
+}
+
+func compatMessage(message domain.Message) compatMessageDTO {
+	var track *compatTrackDTO
+	if message.SharedTrack != nil {
+		dto := compatTrack(*message.SharedTrack)
+		track = &dto
+	}
+	return compatMessageDTO{
+		ID:          message.ID,
+		SenderID:    message.SenderID,
+		SenderName:  message.SenderName,
+		Content:     message.Content,
+		Timestamp:   message.Timestamp,
+		Status:      message.Status,
+		SharedTrack: track,
+	}
+}
+
+func compatMessages(messages []domain.Message) []compatMessageDTO {
+	out := make([]compatMessageDTO, 0, len(messages))
+	for _, message := range messages {
+		out = append(out, compatMessage(message))
+	}
+	return out
 }
 
 func respond(w http.ResponseWriter, value any, err error) {
