@@ -32,9 +32,8 @@ class TrackRepository(
         return combine(remoteTracks, likedFlow, downloadedFlow) { tracks, likedList, downloadedList ->
             val likedIds = likedList.map { it.id }.toSet()
             val downloadedMap = downloadedList.associate { it.id to it.localFilePath }
-            val sourceTracks = tracks.ifEmpty { cachedTracks(likedList, downloadedList) }
 
-            sourceTracks.map { track ->
+            tracks.map { track ->
                 track.copy(
                     isLiked = track.isLiked || likedIds.contains(track.id),
                     isDownloaded = track.isDownloaded || downloadedMap.containsKey(track.id),
@@ -44,40 +43,14 @@ class TrackRepository(
         }
     }
 
-    private fun cachedTracks(
-        likedList: List<LikedSongEntity>,
-        downloadedList: List<DownloadedSongEntity>
-    ): List<Track> {
-        val likedTracks = likedList.associate { liked ->
-            liked.id to Track(
-                id = liked.id,
-                title = liked.title,
-                artistName = liked.artistName,
-                coverImageUrl = liked.coverImageUrl,
-                audioUrl = liked.audioUrl,
-                isLiked = true
-            )
-        }
-        val downloadedTracks = downloadedList.associate { downloaded ->
-            downloaded.id to Track(
-                id = downloaded.id,
-                title = downloaded.title,
-                artistName = downloaded.artistName,
-                coverImageUrl = downloaded.coverImageUrl,
-                audioUrl = downloaded.localFilePath,
-                isDownloaded = true,
-                localFilePath = downloaded.localFilePath
-            )
-        }
-        return (likedTracks + downloadedTracks).values.toList()
-    }
-
     suspend fun refreshTracks(search: String? = null, genre: String? = null): Result<List<Track>> =
         withContext(Dispatchers.IO) {
             runCatching {
                 api.getTracks(genre = genre, search = search)
                     .map(::normalizeTrackUrls)
                     .also { remoteTracks.value = it }
+            }.onFailure {
+                remoteTracks.value = emptyList()
             }
         }
 
