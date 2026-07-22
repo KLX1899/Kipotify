@@ -41,6 +41,10 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	if err := database.SyncMediaCatalog(ctx, db, "media/audio"); err != nil {
+		slog.Error("media catalog sync failed", "error", err)
+		os.Exit(1)
+	}
 
 	app := service.New(repository.NewPostgres(db), cfg)
 	server := &http.Server{

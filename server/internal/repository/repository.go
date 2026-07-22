@@ -455,6 +455,7 @@ func (p *Postgres) messageByID(ctx context.Context, messageID string) (domain.Me
 }
 
 func (p *Postgres) tracksPage(ctx context.Context, userID, where, order string, args []any, page, limit int, extraJoin string) (domain.Paged[[]domain.Track], error) {
+	where = "(" + where + ") and t.audio_file_path like 'media/audio/%'"
 	baseFrom := trackFrom(extraJoin)
 	var total int
 	if err := p.db.QueryRow(ctx, `select count(*)`+baseFrom+` where `+where, args...).Scan(&total); err != nil {
