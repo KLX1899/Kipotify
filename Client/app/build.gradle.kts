@@ -25,13 +25,22 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    val kipotifyBaseUrl = providers.gradleProperty("KIPOTIFY_BASE_URL")
+        .orElse("http://127.0.0.1:18080/")
+        .get()
+    val kipotifyFallbackBaseUrls = providers.gradleProperty("KIPOTIFY_FALLBACK_BASE_URLS")
+        .orElse("http://10.0.2.2:18080/,http://localhost:18080/")
+        .get()
+
     buildTypes {
         debug {
-            buildConfigField("String", "KIPOTIFY_BASE_URL", "\"http://10.0.2.2:18080/\"")
+            buildConfigField("String", "KIPOTIFY_BASE_URL", "\"$kipotifyBaseUrl\"")
+            buildConfigField("String", "KIPOTIFY_FALLBACK_BASE_URLS", "\"$kipotifyFallbackBaseUrls\"")
         }
         release {
             isMinifyEnabled = false
-            buildConfigField("String", "KIPOTIFY_BASE_URL", "\"http://10.0.2.2:18080/\"")
+            buildConfigField("String", "KIPOTIFY_BASE_URL", "\"$kipotifyBaseUrl\"")
+            buildConfigField("String", "KIPOTIFY_FALLBACK_BASE_URLS", "\"$kipotifyFallbackBaseUrls\"")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

@@ -1,6 +1,5 @@
 package com.example.data.repository
 
-import com.example.BuildConfig
 import com.example.data.local.daos.MessageDao
 import com.example.data.local.entities.MessageEntity
 import com.example.data.model.Friend
@@ -132,10 +131,6 @@ class SocialRepository(
     }
 
     private fun absoluteMediaUrl(value: String): String {
-        if (value.isBlank() || value.startsWith("http://") || value.startsWith("https://") || value.startsWith("file://")) {
-            return value
-        }
-        val base = BuildConfig.KIPOTIFY_BASE_URL.trimEnd('/')
-        return if (value.startsWith("/")) "$base$value" else "$base/$value"
+        return KipotifyApiClient.absoluteUrl(value)
     }
 }

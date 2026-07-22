@@ -1,9 +1,11 @@
 package com.example.data.remote
 
-import com.example.data.model.Track
 import com.example.data.model.Friend
 import com.example.data.model.Message
+import com.example.data.model.Track
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonNames
 import retrofit2.http.*
 
 /**
@@ -25,10 +27,10 @@ interface KipotifyApiService {
     suspend fun getTracks(
         @Query("genre") genre: String? = null,
         @Query("search") search: String? = null
-    ): List<Track>
+    ): List<ApiTrackDto>
 
     @GET("api/tracks/{id}")
-    suspend fun getTrackById(@Path("id") trackId: String): Track
+    suspend fun getTrackById(@Path("id") trackId: String): ApiTrackDto
 
     @POST("api/tracks/{id}/like")
     suspend fun toggleLikeTrack(@Path("id") trackId: String): LikeResponse
@@ -77,6 +79,108 @@ interface KipotifyApiService {
 }
 
 // --- Request and Response Data Models ---
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiTrackDto(
+    val id: String,
+    @JsonNames("name")
+    val title: String = "",
+    val slug: String = "",
+    @JsonNames("artist_id")
+    val artistId: String = "",
+    @JsonNames("artist", "artist_name")
+    val artistName: String = "",
+    @JsonNames("album_id")
+    val albumId: String = "",
+    @JsonNames("album", "album_title")
+    val albumTitle: String = "",
+    @JsonNames("release_id")
+    val releaseId: String = "",
+    @JsonNames("release_title")
+    val releaseTitle: String = "",
+    @JsonNames("release_type")
+    val releaseType: String = "",
+    @JsonNames("coverUrl", "cover_image_url", "cover_url", "artworkUrl", "artwork_url")
+    val coverImageUrl: String = "",
+    @JsonNames("fallback_artwork_url")
+    val fallbackArtworkUrl: String = "",
+    @JsonNames("streamUrl", "fileUrl", "audio_url", "stream_url", "file_url")
+    val audioUrl: String = "",
+    @JsonNames("audio_file_path")
+    val audioFilePath: String = "",
+    @JsonNames("lyrics_url")
+    val lyricsUrl: String = "",
+    @JsonNames("lyrics_file_path")
+    val lyricsFilePath: String = "",
+    @JsonNames("artwork_source")
+    val artworkSource: String = "",
+    val genre: String = "",
+    val locale: String = "",
+    @JsonNames("track_number")
+    val trackNumber: Int = 0,
+    @JsonNames("disc_number")
+    val discNumber: Int = 1,
+    @JsonNames("duration", "duration_seconds")
+    val durationSeconds: Int = 180,
+    val lyric: String = "",
+    @JsonNames("release_date")
+    val releaseDate: String? = null,
+    val explicit: Boolean = false,
+    @JsonNames("featured_artists")
+    val featuredArtists: List<String> = emptyList(),
+    @JsonNames("play_count")
+    val playCount: Int = 0,
+    @JsonNames("download_count")
+    val downloadCount: Int = 0,
+    @JsonNames("is_liked")
+    val isLiked: Boolean = false,
+    @JsonNames("is_downloaded")
+    val isDownloaded: Boolean = false,
+    @JsonNames("local_file_path")
+    val localFilePath: String? = null,
+    @JsonNames("created_at")
+    val createdAt: String = ""
+) {
+    fun toTrack(): Track {
+        val resolvedAudioUrl = audioUrl.ifBlank { audioFilePath }
+        val resolvedCoverUrl = coverImageUrl.ifBlank { fallbackArtworkUrl }
+        return Track(
+            id = id,
+            title = title,
+            slug = slug,
+            artistId = artistId,
+            artistName = artistName,
+            albumId = albumId,
+            albumTitle = albumTitle,
+            releaseId = releaseId,
+            releaseTitle = releaseTitle,
+            releaseType = releaseType,
+            coverImageUrl = resolvedCoverUrl,
+            fallbackArtworkUrl = fallbackArtworkUrl.ifBlank { resolvedCoverUrl },
+            audioUrl = resolvedAudioUrl,
+            audioFilePath = audioFilePath,
+            lyricsUrl = lyricsUrl.ifBlank { lyricsFilePath },
+            lyricsFilePath = lyricsFilePath,
+            artworkSource = artworkSource,
+            genre = genre,
+            locale = locale,
+            trackNumber = trackNumber,
+            discNumber = discNumber,
+            durationSeconds = durationSeconds,
+            lyric = lyric,
+            releaseDate = releaseDate,
+            explicit = explicit,
+            featuredArtists = featuredArtists,
+            playCount = playCount,
+            downloadCount = downloadCount,
+            isLiked = isLiked,
+            isDownloaded = isDownloaded,
+            localFilePath = localFilePath,
+            createdAt = createdAt
+        )
+    }
+}
 
 @Serializable
 data class RegisterRequest(

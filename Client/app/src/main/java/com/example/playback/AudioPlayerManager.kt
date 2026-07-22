@@ -10,7 +10,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.io.File
 
 class AudioPlayerManager(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -234,12 +233,7 @@ class AudioPlayerManager(private val context: Context) {
     }
 
     private fun Track.playbackUri(): Uri {
-        val localFile = localFilePath?.let(::File)
-        return if (localFile != null && localFile.exists()) {
-            Uri.fromFile(localFile)
-        } else {
-            Uri.parse(audioUrl)
-        }
+        return Uri.parse(audioUrl)
     }
 
     fun cancelSleepTimer() {

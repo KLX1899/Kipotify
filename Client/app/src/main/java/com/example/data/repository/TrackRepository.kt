@@ -1,12 +1,12 @@
 package com.example.data.repository
 
 import android.content.Context
-import com.example.BuildConfig
 import com.example.data.local.daos.DownloadedSongDao
 import com.example.data.local.daos.LikedSongDao
 import com.example.data.local.entities.DownloadedSongEntity
 import com.example.data.local.entities.LikedSongEntity
 import com.example.data.model.Track
+import com.example.data.remote.KipotifyApiClient
 import com.example.data.remote.KipotifyApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -47,6 +47,7 @@ class TrackRepository(
         withContext(Dispatchers.IO) {
             runCatching {
                 api.getTracks(genre = genre, search = search)
+                    .map { it.toTrack() }
                     .map(::normalizeTrackUrls)
                     .also { remoteTracks.value = it }
             }.onFailure {
@@ -56,14 +57,14 @@ class TrackRepository(
 
     suspend fun getTrackById(trackId: String): Result<Track> = withContext(Dispatchers.IO) {
         runCatching {
-            api.getTrackById(trackId).let(::normalizeTrackUrls)
+            api.getTrackById(trackId).toTrack().let(::normalizeTrackUrls)
         }
     }
 
     suspend fun toggleLike(trackId: String): Result<Boolean> = withContext(Dispatchers.IO) {
         runCatching {
             val response = api.toggleLikeTrack(trackId)
-            val track = remoteTracks.value.firstOrNull { it.id == trackId } ?: api.getTrackById(trackId).let(::normalizeTrackUrls)
+            val track = remoteTracks.value.firstOrNull { it.id == trackId } ?: api.getTrackById(trackId).toTrack().let(::normalizeTrackUrls)
             if (response.isLiked) {
                 likedSongDao.insertLikedSong(
                     LikedSongEntity(
@@ -187,10 +188,6 @@ class TrackRepository(
     }
 
     private fun absoluteMediaUrl(value: String): String {
-        if (value.isBlank() || value.startsWith("http://") || value.startsWith("https://") || value.startsWith("file://")) {
-            return value
-        }
-        val base = BuildConfig.KIPOTIFY_BASE_URL.trimEnd('/')
-        return if (value.startsWith("/")) "$base$value" else "$base/$value"
+        return KipotifyApiClient.absoluteUrl(value)
     }
 }
