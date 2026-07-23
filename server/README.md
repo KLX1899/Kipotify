@@ -75,6 +75,23 @@ The Docker quick start publishes the backend at `http://localhost:18080`. Health
 curl http://localhost:18080/healthz
 ```
 
+### Wireless Android discovery
+
+The backend advertises `_kipotify._tcp.local` with mDNS/DNS-SD. The Android app looks for this
+service on launch, resolves its LAN IP address and advertised port, then activates it only after
+`/healthz` succeeds. It retains the last healthy LAN endpoint and falls back to the configured
+Android build URLs if discovery is unavailable.
+
+For production, configure `TLS_CERT_FILE` and `TLS_KEY_FILE`. The advertised service will then
+use `scheme=https`; the certificate must be trusted by Android and include the backend's LAN IP
+as an IP subject-alternative name because clients connect to the resolved IP address. mDNS is not
+an authentication mechanism, so the Android client rejects HTTP LAN advertisements by default.
+
+For a trusted development LAN only, set both `MDNS_ADVERTISE_INSECURE=true` on the backend and
+`KIPOTIFY_ALLOW_INSECURE_LAN=true` in `Client/gradle.properties`. Do not enable either setting in
+a production build. Docker bridge networking generally cannot multicast onto the host LAN; run the
+backend on the host or use host networking when testing mDNS.
+
 ### Running the Project
 
 Start the backend first, then run the Android client from Android Studio or with Gradle:
