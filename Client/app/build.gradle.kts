@@ -2,8 +2,6 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.ksp)
-    alias(libs.plugins.kotlinx.serialization)
 }
 
 android {
@@ -12,7 +10,6 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true
     }
 
     testOptions {
@@ -29,27 +26,9 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    val kipotifyBaseUrl = providers.gradleProperty("KIPOTIFY_BASE_URL")
-        .orElse("http://127.0.0.1:18080/")
-        .get()
-    val kipotifyFallbackBaseUrls = providers.gradleProperty("KIPOTIFY_FALLBACK_BASE_URLS")
-        .orElse("http://10.0.2.2:18080/,http://localhost:18080/")
-        .get()
-    val kipotifyAllowInsecureLan = providers.gradleProperty("KIPOTIFY_ALLOW_INSECURE_LAN")
-        .orElse("false")
-        .get()
-
     buildTypes {
-        debug {
-            buildConfigField("String", "KIPOTIFY_BASE_URL", "\"$kipotifyBaseUrl\"")
-            buildConfigField("String", "KIPOTIFY_FALLBACK_BASE_URLS", "\"$kipotifyFallbackBaseUrls\"")
-            buildConfigField("boolean", "KIPOTIFY_ALLOW_INSECURE_LAN", kipotifyAllowInsecureLan)
-        }
         release {
             isMinifyEnabled = false
-            buildConfigField("String", "KIPOTIFY_BASE_URL", "\"$kipotifyBaseUrl\"")
-            buildConfigField("String", "KIPOTIFY_FALLBACK_BASE_URLS", "\"$kipotifyFallbackBaseUrls\"")
-            buildConfigField("boolean", "KIPOTIFY_ALLOW_INSECURE_LAN", kipotifyAllowInsecureLan)
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -70,6 +49,8 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 }
 
 dependencies {
+    implementation(project(":domain"))
+    implementation(project(":data"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -82,18 +63,7 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
-    implementation(libs.kotlinx.serialization.json)
     implementation(libs.coil.compose)
-
-    // Room
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler)
-
-    // Retrofit
-    implementation(libs.retrofit.core)
-    implementation(libs.retrofit.kotlinx.serialization)
-    implementation(libs.okhttp)
 
     // Media3 (ExoPlayer + MediaSession)
     implementation(libs.androidx.media3.exoplayer)

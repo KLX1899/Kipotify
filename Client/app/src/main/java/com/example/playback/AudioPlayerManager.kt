@@ -7,9 +7,10 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import com.example.data.local.artwork.EmbeddedArtworkLoader
-import com.example.data.local.artwork.embeddedArtwork
-import com.example.data.model.Track
+import com.example.domain.model.Track
+import com.example.domain.repository.PlaybackController
+import com.example.playback.artwork.EmbeddedArtworkLoader
+import com.example.playback.artwork.embeddedArtwork
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class AudioPlayerManager(
     private val context: Context,
     private val embeddedArtworkLoader: EmbeddedArtworkLoader
-) {
+) : PlaybackController {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private var exoPlayer: ExoPlayer? = null
@@ -26,25 +27,25 @@ class AudioPlayerManager(
     private var currentIndex: Int = -1
 
     private val _currentTrack = MutableStateFlow<Track?>(null)
-    val currentTrack: StateFlow<Track?> = _currentTrack.asStateFlow()
+    override val currentTrack: StateFlow<Track?> = _currentTrack.asStateFlow()
 
     private val _isPlaying = MutableStateFlow(false)
-    val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
+    override val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
 
     private val _playbackPosition = MutableStateFlow(0L)
-    val playbackPosition: StateFlow<Long> = _playbackPosition.asStateFlow()
+    override val playbackPosition: StateFlow<Long> = _playbackPosition.asStateFlow()
 
     private val _durationMs = MutableStateFlow(0L)
-    val durationMs: StateFlow<Long> = _durationMs.asStateFlow()
+    override val durationMs: StateFlow<Long> = _durationMs.asStateFlow()
 
     private val _sleepTimerRemaining = MutableStateFlow(0L) // in seconds
-    val sleepTimerRemaining: StateFlow<Long> = _sleepTimerRemaining.asStateFlow()
+    override val sleepTimerRemaining: StateFlow<Long> = _sleepTimerRemaining.asStateFlow()
 
     private val _visualizerWaves = MutableStateFlow<List<Float>>(List(16) { 0.1f })
-    val visualizerWaves: StateFlow<List<Float>> = _visualizerWaves.asStateFlow()
+    override val visualizerWaves: StateFlow<List<Float>> = _visualizerWaves.asStateFlow()
 
     private val _dominantColor = MutableStateFlow(0xFF1E293B) // Default dark slate
-    val dominantColor: StateFlow<Long> = _dominantColor.asStateFlow()
+    override val dominantColor: StateFlow<Long> = _dominantColor.asStateFlow()
 
     private var sleepTimerJob: Job? = null
     private var visualizerJob: Job? = null
@@ -94,7 +95,7 @@ class AudioPlayerManager(
         }
     }
 
-    fun setPlaylist(tracks: List<Track>, playIndex: Int = 0) {
+    override fun setPlaylist(tracks: List<Track>, playIndex: Int) {
         playlist = tracks
         if (tracks.isNotEmpty() && playIndex in tracks.indices) {
             playTrack(tracks[playIndex])
@@ -192,7 +193,7 @@ class AudioPlayerManager(
         }
     }
 
-    fun pause() {
+    override fun pause() {
         val player = exoPlayer
         if (player != null && player.isPlaying) {
             player.pause()
@@ -203,7 +204,7 @@ class AudioPlayerManager(
         }
     }
 
-    fun resume() {
+    override fun resume() {
         val player = exoPlayer
         if (player != null) {
             player.play()
@@ -214,7 +215,7 @@ class AudioPlayerManager(
         }
     }
 
-    fun next() {
+    override fun next() {
         if (playlist.isEmpty()) return
         val nextIndex = (currentIndex + 1) % playlist.size
         playTrack(playlist[nextIndex])
@@ -227,7 +228,9 @@ class AudioPlayerManager(
         playTrack(playlist[prevIndex])
     }
 
-    fun setSleepTimer(minutes: Int) {
+    override fun previous() = prev()
+
+    override fun setSleepTimer(minutes: Int) {
         sleepTimerJob?.cancel()
         if (minutes <= 0) {
             _sleepTimerRemaining.value = 0L
@@ -303,7 +306,7 @@ class AudioPlayerManager(
         _sleepTimerRemaining.value = 0L
     }
 
-    fun seekTo(positionMs: Long) {
+    override fun seekTo(positionMs: Long) {
         val duration = _durationMs.value
         if (duration <= 0L) return
 

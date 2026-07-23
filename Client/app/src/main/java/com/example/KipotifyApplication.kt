@@ -3,43 +3,31 @@ package com.example
 import android.app.Application
 import coil.ImageLoader
 import coil.ImageLoaderFactory
-import com.example.data.local.artwork.EmbeddedArtworkFetcher
-import com.example.data.local.artwork.EmbeddedArtworkKeyer
-import com.example.data.local.artwork.EmbeddedArtworkLoader
-import com.example.data.local.KipotifyDatabase
-import com.example.data.local.SettingsManager
-import com.example.data.remote.KipotifyApiClient
-import com.example.data.remote.KipotifyApiService
-import com.example.data.remote.BackendEndpointRegistry
-import com.example.data.remote.LanBackendDiscovery
-import com.example.data.repository.AuthRepository
-import com.example.data.repository.SocialRepository
-import com.example.data.repository.TrackRepository
+import com.example.playback.artwork.EmbeddedArtworkFetcher
+import com.example.playback.artwork.EmbeddedArtworkKeyer
+import com.example.playback.artwork.EmbeddedArtworkLoader
+import com.example.data.KipotifyDataContainer
+import com.example.domain.repository.ConnectionRepository
+import com.example.domain.repository.PlaybackController
+import com.example.domain.usecase.AccountUseCases
+import com.example.domain.usecase.SearchHistoryUseCases
+import com.example.domain.usecase.SocialUseCases
+import com.example.domain.usecase.TrackUseCases
 import com.example.playback.AudioPlayerManager
+import com.example.ui.viewmodel.KipotifyDependencies
 
-class KipotifyApplication : Application(), ImageLoaderFactory {
-    lateinit var database: KipotifyDatabase
+class KipotifyApplication : Application(), ImageLoaderFactory, KipotifyDependencies {
+    override lateinit var trackUseCases: TrackUseCases
         private set
-
-    lateinit var settingsManager: SettingsManager
+    override lateinit var socialUseCases: SocialUseCases
         private set
-
-    lateinit var apiService: KipotifyApiService
+    override lateinit var accountUseCases: AccountUseCases
         private set
-
-    lateinit var backendDiscovery: LanBackendDiscovery
+    override lateinit var searchHistoryUseCases: SearchHistoryUseCases
         private set
-
-    lateinit var authRepository: AuthRepository
+    override lateinit var playbackController: PlaybackController
         private set
-
-    lateinit var trackRepository: TrackRepository
-        private set
-
-    lateinit var socialRepository: SocialRepository
-        private set
-
-    lateinit var audioPlayerManager: AudioPlayerManager
+    override lateinit var connectionRepository: ConnectionRepository
         private set
 
     val embeddedArtworkLoader by lazy { EmbeddedArtworkLoader(this) }
@@ -56,30 +44,17 @@ class KipotifyApplication : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
-        database = KipotifyDatabase.getDatabase(this)
-        settingsManager = SettingsManager(this)
-        val endpointRegistry = BackendEndpointRegistry(settingsManager)
-        apiService = KipotifyApiClient.create(settingsManager, endpointRegistry)
-        backendDiscovery = LanBackendDiscovery(this, endpointRegistry).also { it.start() }
-        authRepository = AuthRepository(
-            api = apiService,
-            settingsManager = settingsManager
-        )
-        trackRepository = TrackRepository(
-            context = this,
-            api = apiService,
-            likedSongDao = database.likedSongDao(),
-            downloadedSongDao = database.downloadedSongDao()
-        )
-        socialRepository = SocialRepository(
-            api = apiService,
-            messageDao = database.messageDao()
-        )
+        val data = KipotifyDataContainer(this)
         val attributionContext = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             createAttributionContext("media")
         } else {
             this
         }
-        audioPlayerManager = AudioPlayerManager(attributionContext, embeddedArtworkLoader)
+        trackUseCases = TrackUseCases(data.trackRepository, data.accountRepository)
+        socialUseCases = SocialUseCases(data.socialRepository)
+        accountUseCases = AccountUseCases(data.accountRepository)
+        searchHistoryUseCases = SearchHistoryUseCases(data.searchHistoryRepository)
+        playbackController = AudioPlayerManager(attributionContext, embeddedArtworkLoader)
+        connectionRepository = data.connectionRepository
     }
 }

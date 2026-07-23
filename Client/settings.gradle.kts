@@ -23,3 +23,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Kipotify"
 include(":app")
+include(":data")
+include(":domain")

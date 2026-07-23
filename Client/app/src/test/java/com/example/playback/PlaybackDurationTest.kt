@@ -1,6 +1,6 @@
 package com.example.playback
 
-import com.example.formatTime
+import com.example.ui.formatTime
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
