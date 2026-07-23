@@ -92,6 +92,11 @@ For a trusted development LAN only, set both `MDNS_ADVERTISE_INSECURE=true` on t
 a production build. Docker bridge networking generally cannot multicast onto the host LAN; run the
 backend on the host or use host networking when testing mDNS.
 
+The server watches its active LAN interfaces and recreates the advertisement when the default-route
+interface or its private IPv4 addresses change. Virtual, VPN, bridge, link-local, and disconnected
+interfaces are ignored. If a non-standard interface is intentionally required, set
+`MDNS_INTERFACE` to its exact name; this is an explicit override, not a recommended default.
+
 ### Running the Project
 
 Start the backend first, then run the Android client from Android Studio or with Gradle:

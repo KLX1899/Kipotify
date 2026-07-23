@@ -58,6 +58,10 @@ class SettingsManager(context: Context) {
         prefs.edit().putString("last_lan_backend", baseUrl).apply()
     }
 
+    fun clearLastLanBackend() {
+        prefs.edit().remove("last_lan_backend").apply()
+    }
+
     fun setFontSize(size: Float) {
         prefs.edit().putFloat("font_size", size).apply()
         _fontSize.value = size

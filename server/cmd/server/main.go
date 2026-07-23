@@ -53,12 +53,11 @@ func main() {
 		Handler:           httptransport.NewRouter(app, cfg),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	advertiser, err := lan.StartAdvertisement(cfg)
+	advertiser, err := lan.StartAdvertisement(ctx, cfg)
 	if err != nil {
 		slog.Warn("mDNS advertisement disabled", "error", err)
 	} else if advertiser != nil {
 		defer advertiser.Shutdown()
-		slog.Info("kipotify backend advertised on local network", "service", "_kipotify._tcp")
 	} else {
 		slog.Info("mDNS advertisement disabled; configure TLS or explicitly allow insecure development advertisement")
 	}

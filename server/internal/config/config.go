@@ -23,6 +23,7 @@ type Config struct {
 	MDNSInstance          string
 	MDNSPriority          int
 	MDNSAdvertiseInsecure bool
+	MDNSInterface         string
 }
 
 func Load() Config {
@@ -42,6 +43,7 @@ func Load() Config {
 		MDNSInstance:          get("MDNS_INSTANCE", "Kipotify"),
 		MDNSPriority:          intEnv("MDNS_PRIORITY", 0),
 		MDNSAdvertiseInsecure: boolEnv("MDNS_ADVERTISE_INSECURE", false),
+		MDNSInterface:         get("MDNS_INTERFACE", ""),
 	}
 }
 
