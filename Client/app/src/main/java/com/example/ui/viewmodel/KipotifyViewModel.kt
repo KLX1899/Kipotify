@@ -41,6 +41,7 @@ data class KipotifyUiState(
     val currentTrack: Track? = null,
     val isPlaying: Boolean = false,
     val playbackPosition: Long = 0L,
+    val durationMs: Long = 0L,
     val playbackSpeed: Float = 1.0f,
     val sleepTimerRemaining: Long = 0L,
     val visualizerWaves: List<Float> = List(16) { 0.1f },
@@ -162,6 +163,11 @@ class KipotifyViewModel(
         viewModelScope.launch {
             audioPlayerManager.playbackPosition.collect { pos ->
                 _uiState.update { it.copy(playbackPosition = pos) }
+            }
+        }
+        viewModelScope.launch {
+            audioPlayerManager.durationMs.collect { duration ->
+                _uiState.update { it.copy(durationMs = duration) }
             }
         }
         viewModelScope.launch {

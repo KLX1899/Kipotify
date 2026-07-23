@@ -34,6 +34,9 @@ class AudioPlayerManager(
     private val _playbackPosition = MutableStateFlow(0L)
     val playbackPosition: StateFlow<Long> = _playbackPosition.asStateFlow()
 
+    private val _durationMs = MutableStateFlow(0L)
+    val durationMs: StateFlow<Long> = _durationMs.asStateFlow()
+
     private val _playbackSpeed = MutableStateFlow(1.0f)
     val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
 
@@ -56,6 +59,7 @@ class AudioPlayerManager(
     init {
         try {
             exoPlayer = ExoPlayer.Builder(context).build().apply {
+                val initializedPlayer = this
                 repeatMode = Player.REPEAT_MODE_ALL
                 addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(isPlayingChanged: Boolean) {
@@ -72,6 +76,17 @@ class AudioPlayerManager(
                     override fun onPlaybackStateChanged(state: Int) {
                         if (state == Player.STATE_ENDED) {
                             this@AudioPlayerManager.next()
+                        } else {
+                            updateDurationFrom(initializedPlayer)
+                        }
+                    }
+
+                    override fun onEvents(player: Player, events: Player.Events) {
+                        if (
+                            events.contains(Player.EVENT_TIMELINE_CHANGED) ||
+                            events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
+                        ) {
+                            updateDurationFrom(player)
                         }
                     }
                 })
@@ -99,9 +114,8 @@ class AudioPlayerManager(
     }
 
     private fun executeInstantPlay(track: Track) {
-        _currentTrack.value = track
+        resetPlaybackStateFor(track)
         _dominantColor.value = generateDominantColor(track)
-        _playbackPosition.value = 0L
         currentIndex = playlist.indexOfFirst { it.id == track.id }
 
         val player = exoPlayer
@@ -146,9 +160,8 @@ class AudioPlayerManager(
             }
 
             // Update current track parameters
-            _currentTrack.value = track
+            resetPlaybackStateFor(track)
             _dominantColor.value = generateDominantColor(track)
-            _playbackPosition.value = 0L
             currentIndex = playlist.indexOfFirst { it.id == track.id }
 
             if (player != null) {
@@ -301,8 +314,25 @@ class AudioPlayerManager(
     }
 
     fun seekTo(positionMs: Long) {
-        _playbackPosition.value = positionMs
-        exoPlayer?.seekTo(positionMs)
+        val duration = _durationMs.value
+        if (duration <= 0L) return
+
+        val safePosition = positionMs.coerceIn(0L, duration)
+        _playbackPosition.value = safePosition
+        exoPlayer?.seekTo(safePosition)
+    }
+
+    private fun resetPlaybackStateFor(track: Track) {
+        // Reset before publishing the new track so its UI can never inherit the previous
+        // track's progress or duration while the new media is loading.
+        _playbackPosition.value = 0L
+        _durationMs.value = 0L
+        _currentTrack.value = track
+    }
+
+    private fun updateDurationFrom(player: Player) {
+        val isCurrentMedia = player.currentMediaItem?.mediaId == _currentTrack.value?.id
+        _durationMs.value = if (isCurrentMedia) sanitizeDurationMs(player.duration) else 0L
     }
 
     private fun startPositionUpdates() {
@@ -312,14 +342,22 @@ class AudioPlayerManager(
                 val player = exoPlayer
                 if (player != null) {
                     _playbackPosition.value = player.currentPosition
-                    val duration = player.duration
+                    updateDurationFrom(player)
+                    val duration = _durationMs.value
                     if (duration > 0 && duration - player.currentPosition < 1800 && !isCrossFading) {
                         next()
                     }
                 } else {
-                    val maxDuration = (_currentTrack.value?.durationSeconds ?: 180) * 1000L
-                    _playbackPosition.value = (_playbackPosition.value + (1000 * _playbackSpeed.value).toLong()).coerceAtMost(maxDuration)
-                    if (_playbackPosition.value >= maxDuration) {
+                    val simulatedDuration = _currentTrack.value
+                        ?.durationSeconds
+                        ?.takeIf { it > 0 }
+                        ?.times(1000L)
+                    val nextPosition = _playbackPosition.value +
+                        (1000 * _playbackSpeed.value).toLong()
+                    _playbackPosition.value = simulatedDuration
+                        ?.let(nextPosition::coerceAtMost)
+                        ?: nextPosition
+                    if (simulatedDuration != null && _playbackPosition.value >= simulatedDuration) {
                         next()
                         break
                     }
@@ -366,3 +404,6 @@ class AudioPlayerManager(
         return palettes[index]
     }
 }
+
+internal fun sanitizeDurationMs(durationMs: Long): Long =
+    durationMs.takeIf { it > 0L && it < Long.MAX_VALUE } ?: 0L

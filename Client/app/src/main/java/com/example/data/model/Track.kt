@@ -25,7 +25,7 @@ data class Track(
     val locale: String = "",
     val trackNumber: Int = 0,
     val discNumber: Int = 1,
-    val durationSeconds: Int = 180,
+    val durationSeconds: Int = 0,
     val lyric: String = "",
     val releaseDate: String? = null,
     val explicit: Boolean = false,

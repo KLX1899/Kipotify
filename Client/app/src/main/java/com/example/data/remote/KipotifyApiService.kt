@@ -122,7 +122,7 @@ data class ApiTrackDto(
     @JsonNames("disc_number")
     val discNumber: Int = 1,
     @JsonNames("duration", "duration_seconds")
-    val durationSeconds: Int = 180,
+    val durationSeconds: Int = 0,
     val lyric: String = "",
     @JsonNames("release_date")
     val releaseDate: String? = null,

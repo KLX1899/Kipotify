@@ -1401,8 +1401,8 @@ fun NowPlayingScreen(
         )
 
         // Progress Seek Bar
-        val maxMs = (track.durationSeconds * 1000L)
-        var draggingPosition by remember { mutableStateOf<Float?>(null) }
+        val maxMs = state.durationMs
+        var draggingPosition by remember(track.id) { mutableStateOf<Float?>(null) }
         val currentSliderValue = draggingPosition ?: state.playbackPosition.toFloat()
 
         Column {
@@ -1416,6 +1416,7 @@ fun NowPlayingScreen(
                     draggingPosition = null
                 },
                 valueRange = 0f..maxMs.toFloat(),
+                enabled = maxMs > 0L,
                 colors = SliderDefaults.colors(
                     activeTrackColor = MaterialTheme.colorScheme.primary,
                     inactiveTrackColor = Color.White.copy(alpha = 0.3f)
@@ -1827,8 +1828,9 @@ fun EmptyStateView(
 }
 
 fun formatTime(milliseconds: Long): String {
-    val seconds = (milliseconds / 1000) % 60
-    val minutes = (milliseconds / (1000 * 60)) % 60
+    val safeMilliseconds = milliseconds.coerceAtLeast(0L)
+    val seconds = (safeMilliseconds / 1000) % 60
+    val minutes = safeMilliseconds / (1000 * 60)
     return String.format("%d:%02d", minutes, seconds)
 }
 
