@@ -5,6 +5,8 @@ import com.example.data.local.KipotifyDatabase
 import com.example.data.local.SettingsManager
 import com.example.data.remote.KipotifyApiClient
 import com.example.data.remote.KipotifyApiService
+import com.example.data.remote.BackendEndpointRegistry
+import com.example.data.remote.LanBackendDiscovery
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.SocialRepository
 import com.example.data.repository.TrackRepository
@@ -18,6 +20,9 @@ class KipotifyApplication : Application() {
         private set
 
     lateinit var apiService: KipotifyApiService
+        private set
+
+    lateinit var backendDiscovery: LanBackendDiscovery
         private set
 
     lateinit var authRepository: AuthRepository
@@ -36,7 +41,9 @@ class KipotifyApplication : Application() {
         super.onCreate()
         database = KipotifyDatabase.getDatabase(this)
         settingsManager = SettingsManager(this)
-        apiService = KipotifyApiClient.create(settingsManager)
+        val endpointRegistry = BackendEndpointRegistry(settingsManager)
+        apiService = KipotifyApiClient.create(settingsManager, endpointRegistry)
+        backendDiscovery = LanBackendDiscovery(this, endpointRegistry).also { it.start() }
         authRepository = AuthRepository(
             api = apiService,
             settingsManager = settingsManager

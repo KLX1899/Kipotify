@@ -31,16 +31,21 @@ android {
     val kipotifyFallbackBaseUrls = providers.gradleProperty("KIPOTIFY_FALLBACK_BASE_URLS")
         .orElse("http://10.0.2.2:18080/,http://localhost:18080/")
         .get()
+    val kipotifyAllowInsecureLan = providers.gradleProperty("KIPOTIFY_ALLOW_INSECURE_LAN")
+        .orElse("false")
+        .get()
 
     buildTypes {
         debug {
             buildConfigField("String", "KIPOTIFY_BASE_URL", "\"$kipotifyBaseUrl\"")
             buildConfigField("String", "KIPOTIFY_FALLBACK_BASE_URLS", "\"$kipotifyFallbackBaseUrls\"")
+            buildConfigField("boolean", "KIPOTIFY_ALLOW_INSECURE_LAN", kipotifyAllowInsecureLan)
         }
         release {
             isMinifyEnabled = false
             buildConfigField("String", "KIPOTIFY_BASE_URL", "\"$kipotifyBaseUrl\"")
             buildConfigField("String", "KIPOTIFY_FALLBACK_BASE_URLS", "\"$kipotifyFallbackBaseUrls\"")
+            buildConfigField("boolean", "KIPOTIFY_ALLOW_INSECURE_LAN", kipotifyAllowInsecureLan)
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

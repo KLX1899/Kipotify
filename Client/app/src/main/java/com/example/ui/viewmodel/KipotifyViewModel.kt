@@ -10,6 +10,7 @@ import com.example.data.local.entities.SearchHistoryEntity
 import com.example.data.model.Friend
 import com.example.data.model.Message
 import com.example.data.model.Track
+import com.example.data.remote.BackendConnectionState
 import com.example.data.repository.AuthRepository
 import com.example.data.repository.SocialRepository
 import com.example.data.repository.TrackRepository
@@ -34,6 +35,7 @@ data class KipotifyUiState(
     val downloadingProgress: Map<String, Int> = emptyMap(),
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
+    val backendConnection: BackendConnectionState = BackendConnectionState.Discovering,
     
     // Player values
     val currentTrack: Track? = null,
@@ -87,6 +89,12 @@ class KipotifyViewModel(
 
     init {
         refreshStartupData()
+
+        viewModelScope.launch {
+            getApplication<KipotifyApplication>().backendDiscovery.connectionState.collect { connection ->
+                _uiState.update { it.copy(backendConnection = connection) }
+            }
+        }
 
         // Observe tracks
         viewModelScope.launch {

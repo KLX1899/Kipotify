@@ -55,6 +55,7 @@ import coil.compose.AsyncImage
 import com.example.data.model.Friend
 import com.example.data.model.Message
 import com.example.data.model.Track
+import com.example.data.remote.BackendConnectionState
 import com.example.ui.theme.KipotifyTheme
 import com.example.ui.viewmodel.KipotifyEvent
 import com.example.ui.viewmodel.KipotifyUiState
@@ -161,6 +162,24 @@ fun AppShell(
                             fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
+                        if (state.backendConnection !is BackendConnectionState.Connected) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(
+                                imageVector = when (state.backendConnection) {
+                                    BackendConnectionState.Discovering,
+                                    is BackendConnectionState.Reconnecting -> Icons.Default.Sync
+                                    is BackendConnectionState.Fallback -> Icons.Default.CloudOff
+                                    is BackendConnectionState.Unavailable -> Icons.Default.ErrorOutline
+                                    is BackendConnectionState.Connected -> Icons.Default.Wifi
+                                },
+                                contentDescription = state.backendConnection.message,
+                                tint = when (state.backendConnection) {
+                                    is BackendConnectionState.Unavailable -> MaterialTheme.colorScheme.error
+                                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 },
                 actions = {
@@ -305,6 +324,33 @@ fun AppShell(
                         )
                         "profile" -> ProfileTab(state = state, onEvent = onEvent)
                     }
+                }
+            }
+
+            if (state.backendConnection !is BackendConnectionState.Connected) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (state.backendConnection is BackendConnectionState.Unavailable) {
+                        MaterialTheme.colorScheme.errorContainer
+                    } else {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    },
+                    tonalElevation = 3.dp
+                ) {
+                    Text(
+                        text = state.backendConnection.message,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        color = if (state.backendConnection is BackendConnectionState.Unavailable) {
+                            MaterialTheme.colorScheme.onErrorContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
 

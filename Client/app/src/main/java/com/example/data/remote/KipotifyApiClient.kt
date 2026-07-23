@@ -31,16 +31,10 @@ object KipotifyApiClient {
         return if (value.startsWith("/")) "$base$value" else "$base/$value"
     }
 
-    fun create(settingsManager: SettingsManager): KipotifyApiService {
-        val backendBaseUrls = buildList {
-            add(BuildConfig.KIPOTIFY_BASE_URL)
-            BuildConfig.KIPOTIFY_FALLBACK_BASE_URLS
-                .split(",")
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-                .forEach(::add)
-        }.distinct()
-
+    fun create(
+        settingsManager: SettingsManager,
+        endpointRegistry: BackendEndpointRegistry,
+    ): KipotifyApiService {
         val okHttpClient = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
@@ -61,7 +55,8 @@ object KipotifyApiClient {
                 val original = chain.request()
                 var lastFailure: IOException? = null
 
-                backendBaseUrls.forEach { baseUrl ->
+                val canRetryOnAnotherBackend = original.method in SAFE_TO_RETRY_METHODS
+                for (baseUrl in endpointRegistry.requestCandidates()) {
                     val request = original.retarget(baseUrl)
                     try {
                         val response = chain.proceed(request)
@@ -69,6 +64,8 @@ object KipotifyApiClient {
                         return@addInterceptor response
                     } catch (error: IOException) {
                         lastFailure = error
+                        endpointRegistry.transportFailed(baseUrl)
+                        if (!canRetryOnAnotherBackend) break
                     }
                 }
 
@@ -93,4 +90,6 @@ object KipotifyApiClient {
             .build()
         return newBuilder().url(newUrl).build()
     }
+
+    private val SAFE_TO_RETRY_METHODS = setOf("GET", "HEAD", "OPTIONS")
 }

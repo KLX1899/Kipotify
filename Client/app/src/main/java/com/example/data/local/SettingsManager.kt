@@ -52,6 +52,12 @@ class SettingsManager(context: Context) {
 
     fun getAuthToken(): String? = _authToken.value
 
+    fun getLastLanBackend(): String? = prefs.getString("last_lan_backend", null)
+
+    fun setLastLanBackend(baseUrl: String) {
+        prefs.edit().putString("last_lan_backend", baseUrl).apply()
+    }
+
     fun setFontSize(size: Float) {
         prefs.edit().putFloat("font_size", size).apply()
         _fontSize.value = size
