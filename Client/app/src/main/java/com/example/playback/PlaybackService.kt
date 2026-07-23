@@ -5,19 +5,19 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
+    @Inject
+    lateinit var player: ExoPlayer
+
     private var mediaSession: MediaSession? = null
 
     override fun onCreate() {
         super.onCreate()
-        val attributionContext = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            createAttributionContext("media")
-        } else {
-            this
-        }
-        val player = ExoPlayer.Builder(attributionContext).build()
-        mediaSession = MediaSession.Builder(attributionContext, player).build()
+        mediaSession = MediaSession.Builder(this, player).build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
@@ -32,7 +32,6 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
-        mediaSession?.player?.release()
         mediaSession?.release()
         mediaSession = null
         super.onDestroy()

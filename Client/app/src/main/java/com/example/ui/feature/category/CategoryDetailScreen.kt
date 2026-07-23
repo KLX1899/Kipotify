@@ -1,4 +1,4 @@
-package com.example.ui
+package com.example.ui.feature.category
 
 import android.app.Activity
 import android.os.Bundle
@@ -73,65 +73,62 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.Locale
-import com.example.ui.app.AppShell
-import com.example.ui.feature.splash.SplashScreen
+import com.example.ui.components.EmptyStateView
+import com.example.ui.components.TrackListItem
 
 
-@AndroidEntryPoint
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            val viewModel: KipotifyViewModel = hiltViewModel()
-            val state by viewModel.uiState.collectAsStateWithLifecycle()
+@Composable
+fun CategoryDetailView(
+    categoryName: String,
+    state: KipotifyUiState,
+    onEvent: (KipotifyEvent) -> Unit,
+    onBack: () -> Unit
+) {
+    // Determine track set
+    val tracks = when (categoryName) {
+        "Liked" -> state.tracks.filter { it.isLiked }
+        "Recent" -> state.tracks.take(6)
+        "Artists" -> state.tracks.filter { it.id.hashCode() % 3 == 0 }
+        "User" -> state.tracks.filter { it.id.hashCode() % 5 == 0 }
+        else -> state.tracks.filter { it.id.hashCode() % 4 == 0 }
+    }
 
-            // Request Notification Permission on Android 13/14+
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                val requestPermissionLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestPermission()
-                ) { _ -> }
-                LaunchedEffect(Unit) {
-                    requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
+    Column(modifier = Modifier.fillMaxSize().padding(bottom = 80.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
             }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(categoryName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
 
-            // Dynamic Locale Configuration
-            val locale = Locale(state.language)
-            Locale.setDefault(locale)
-            val resources = LocalContext.current.resources
-            val config = resources.configuration
-            config.setLocale(locale)
-            resources.updateConfiguration(config, resources.displayMetrics)
-
-            val systemTheme = isSystemInDarkTheme()
-            val useDarkTheme = when (state.theme) {
-                "dark" -> true
-                "light" -> false
-                else -> systemTheme
-            }
-
-            var showSplash by remember { mutableStateOf(true) }
-
-            KipotifyTheme(darkTheme = useDarkTheme) {
-                val layoutDirection = if (state.language == "fa") LayoutDirection.Rtl else LayoutDirection.Ltr
-                CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-                    AnimatedContent(
-                        targetState = showSplash,
-                        transitionSpec = {
-                            fadeIn(animationSpec = tween(400)) togetherWith fadeOut(animationSpec = tween(450))
-                        },
-                        label = "Splash To App Transition"
-                    ) { isSplash ->
-                        if (isSplash) {
-                            SplashScreen(onTimeout = { showSplash = false })
-                        } else {
-                            AppShell(state = state, onEvent = viewModel::onEvent)
-                        }
-                    }
+        if (tracks.isEmpty()) {
+            EmptyStateView(
+                icon = Icons.Default.Favorite,
+                message = stringResource(R.string.playlist_empty)
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 12.dp)
+            ) {
+                items(tracks, key = { it.id }) { track ->
+                    TrackListItem(
+                        track = track,
+                        onPlay = { onEvent(KipotifyEvent.OnPlayTrack(track, tracks)) },
+                        onLike = { onEvent(KipotifyEvent.OnToggleLike(track.id)) }
+                    )
                 }
             }
         }
     }
 }
+
+// ==========================================
+// MEDIA PLAYER DRAWING & SHELLS
+// ==========================================

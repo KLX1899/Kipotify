@@ -1,4 +1,4 @@
-package com.example.ui
+package com.example.ui.feature.downloads
 
 import android.app.Activity
 import android.os.Bundle
@@ -73,63 +73,80 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.Locale
-import com.example.ui.app.AppShell
-import com.example.ui.feature.splash.SplashScreen
+import com.example.ui.components.EmptyStateView
+import com.example.ui.components.SectionHeader
+import com.example.ui.components.TrackListItem
 
 
-@AndroidEntryPoint
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            val viewModel: KipotifyViewModel = hiltViewModel()
-            val state by viewModel.uiState.collectAsStateWithLifecycle()
+@Composable
+fun DownloadsTab(
+    state: KipotifyUiState,
+    onEvent: (KipotifyEvent) -> Unit,
+    onShowUpgradeDialog: () -> Unit
+) {
+    val downloadedTracks = state.tracks.filter { it.isDownloaded }
 
-            // Request Notification Permission on Android 13/14+
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                val requestPermissionLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestPermission()
-                ) { _ -> }
-                LaunchedEffect(Unit) {
-                    requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    Column(modifier = Modifier.fillMaxSize().padding(bottom = 80.dp)) {
+        SectionHeader(title = stringResource(R.string.downloads_title))
+
+        if (downloadedTracks.isEmpty()) {
+            EmptyStateView(
+                icon = Icons.Outlined.KeyboardArrowDown,
+                message = stringResource(R.string.downloads_empty),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            )
+            // Add a shortcut upgrade button for non-premium
+            if (!state.isPremium) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Button(
+                        onClick = onShowUpgradeDialog,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                    ) {
+                        Text(stringResource(R.string.upgrade_to_premium))
+                    }
+                }
+            }
+        } else {
+            // Show downloading queues if active
+            if (state.downloadingProgress.isNotEmpty()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    shape = MaterialTheme.shapes.large,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(stringResource(R.string.downloading_work))
+                    }
                 }
             }
 
-            // Dynamic Locale Configuration
-            val locale = Locale(state.language)
-            Locale.setDefault(locale)
-            val resources = LocalContext.current.resources
-            val config = resources.configuration
-            config.setLocale(locale)
-            resources.updateConfiguration(config, resources.displayMetrics)
-
-            val systemTheme = isSystemInDarkTheme()
-            val useDarkTheme = when (state.theme) {
-                "dark" -> true
-                "light" -> false
-                else -> systemTheme
-            }
-
-            var showSplash by remember { mutableStateOf(true) }
-
-            KipotifyTheme(darkTheme = useDarkTheme) {
-                val layoutDirection = if (state.language == "fa") LayoutDirection.Rtl else LayoutDirection.Ltr
-                CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-                    AnimatedContent(
-                        targetState = showSplash,
-                        transitionSpec = {
-                            fadeIn(animationSpec = tween(400)) togetherWith fadeOut(animationSpec = tween(450))
-                        },
-                        label = "Splash To App Transition"
-                    ) { isSplash ->
-                        if (isSplash) {
-                            SplashScreen(onTimeout = { showSplash = false })
-                        } else {
-                            AppShell(state = state, onEvent = viewModel::onEvent)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 12.dp)
+            ) {
+                items(downloadedTracks, key = { it.id }) { track ->
+                    TrackListItem(
+                        track = track,
+                        onPlay = { onEvent(KipotifyEvent.OnPlayTrack(track, downloadedTracks)) },
+                        trailingContent = {
+                            IconButton(onClick = { onEvent(KipotifyEvent.OnRemoveDownload(track.id)) }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete Offline",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
-                    }
+                    )
                 }
             }
         }

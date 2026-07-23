@@ -1,6 +1,5 @@
 package com.example.playback
 
-import android.content.Context
 import android.net.Uri
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
@@ -17,12 +16,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class AudioPlayerManager(
-    private val context: Context,
+    private val exoPlayer: ExoPlayer?,
     private val embeddedArtworkLoader: EmbeddedArtworkLoader
 ) : PlaybackController {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    private var exoPlayer: ExoPlayer? = null
     private var playlist: List<Track> = emptyList()
     private var currentIndex: Int = -1
 
@@ -55,43 +53,38 @@ class AudioPlayerManager(
     private var artworkMetadataJob: Job? = null
 
     init {
-        try {
-            exoPlayer = ExoPlayer.Builder(context).build().apply {
-                val initializedPlayer = this
-                repeatMode = Player.REPEAT_MODE_ALL
-                addListener(object : Player.Listener {
-                    override fun onIsPlayingChanged(isPlayingChanged: Boolean) {
-                        _isPlaying.value = isPlayingChanged
-                        if (isPlayingChanged) {
-                            startVisualizerSimulation()
-                            startPositionUpdates()
-                        } else {
-                            stopVisualizerSimulation()
-                            stopPositionUpdates()
-                        }
+        exoPlayer?.apply {
+            val initializedPlayer = this
+            repeatMode = Player.REPEAT_MODE_ALL
+            addListener(object : Player.Listener {
+                override fun onIsPlayingChanged(isPlayingChanged: Boolean) {
+                    _isPlaying.value = isPlayingChanged
+                    if (isPlayingChanged) {
+                        startVisualizerSimulation()
+                        startPositionUpdates()
+                    } else {
+                        stopVisualizerSimulation()
+                        stopPositionUpdates()
                     }
+                }
 
-                    override fun onPlaybackStateChanged(state: Int) {
-                        if (state == Player.STATE_ENDED) {
-                            this@AudioPlayerManager.next()
-                        } else {
-                            updateDurationFrom(initializedPlayer)
-                        }
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_ENDED) {
+                        this@AudioPlayerManager.next()
+                    } else {
+                        updateDurationFrom(initializedPlayer)
                     }
+                }
 
-                    override fun onEvents(player: Player, events: Player.Events) {
-                        if (
-                            events.contains(Player.EVENT_TIMELINE_CHANGED) ||
-                            events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
-                        ) {
-                            updateDurationFrom(player)
-                        }
+                override fun onEvents(player: Player, events: Player.Events) {
+                    if (
+                        events.contains(Player.EVENT_TIMELINE_CHANGED) ||
+                        events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
+                    ) {
+                        updateDurationFrom(player)
                     }
-                })
-            }
-        } catch (e: Exception) {
-            // Graceful fallback for headless or restricted Android runtimes
-            _isPlaying.value = false
+                }
+            })
         }
     }
 

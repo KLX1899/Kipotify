@@ -1,7 +1,6 @@
 package com.example.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.domain.model.BackendConnection
 import com.example.domain.model.Friend
@@ -17,6 +16,8 @@ import com.example.domain.usecase.TrackUseCases
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 
 data class KipotifyUiState(
     val tracks: List<Track> = emptyList(),
@@ -71,7 +72,8 @@ sealed interface KipotifyEvent {
 }
 
 @OptIn(FlowPreview::class)
-class KipotifyViewModel(
+@HiltViewModel
+class KipotifyViewModel @Inject constructor(
     private val tracks: TrackUseCases,
     private val social: SocialUseCases,
     private val account: AccountUseCases,
@@ -349,29 +351,4 @@ class KipotifyViewModel(
         }
     }
 
-    class Factory(private val dependencies: KipotifyDependencies) : ViewModelProvider.Factory {
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            if (modelClass.isAssignableFrom(KipotifyViewModel::class.java)) {
-                @Suppress("UNCHECKED_CAST")
-                return KipotifyViewModel(
-                    tracks = dependencies.trackUseCases,
-                    social = dependencies.socialUseCases,
-                    account = dependencies.accountUseCases,
-                    searchHistory = dependencies.searchHistoryUseCases,
-                    playback = dependencies.playbackController,
-                    connection = dependencies.connectionRepository,
-                ) as T
-            }
-            throw IllegalArgumentException("Unknown ViewModel class")
-        }
-    }
-}
-
-interface KipotifyDependencies {
-    val trackUseCases: TrackUseCases
-    val socialUseCases: SocialUseCases
-    val accountUseCases: AccountUseCases
-    val searchHistoryUseCases: SearchHistoryUseCases
-    val playbackController: PlaybackController
-    val connectionRepository: ConnectionRepository
 }

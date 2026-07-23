@@ -1,4 +1,4 @@
-package com.example.ui
+package com.example.ui.feature.playlists
 
 import android.app.Activity
 import android.os.Bundle
@@ -73,62 +73,72 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.Locale
-import com.example.ui.app.AppShell
-import com.example.ui.feature.splash.SplashScreen
+import com.example.ui.components.SectionHeader
+import com.example.ui.components.shadowScale
 
 
-@AndroidEntryPoint
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent {
-            val viewModel: KipotifyViewModel = hiltViewModel()
-            val state by viewModel.uiState.collectAsStateWithLifecycle()
+@Composable
+fun PlaylistsTab(
+    state: KipotifyUiState,
+    onEvent: (KipotifyEvent) -> Unit,
+    onCategorySelect: (String) -> Unit
+) {
+    val genres = listOf(
+        Pair("موسیقی سنتی", Color(0xFFB45309)),
+        Pair("سنتور نوازی", Color(0xFF047857)),
+        Pair("Synthwave", Color(0xFF701A75)),
+        Pair("Ambient Piano", Color(0xFF1E1B4B)),
+        Pair("Chill Beats", Color(0xFF0369A1)),
+        Pair("Rock Legends", Color(0xFFBE123C))
+    )
 
-            // Request Notification Permission on Android 13/14+
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                val requestPermissionLauncher = rememberLauncherForActivityResult(
-                    ActivityResultContracts.RequestPermission()
-                ) { _ -> }
-                LaunchedEffect(Unit) {
-                    requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
-            }
+    Column(modifier = Modifier.fillMaxSize().padding(bottom = 80.dp)) {
+        SectionHeader(title = stringResource(R.string.playlists_title))
 
-            // Dynamic Locale Configuration
-            val locale = Locale(state.language)
-            Locale.setDefault(locale)
-            val resources = LocalContext.current.resources
-            val config = resources.configuration
-            config.setLocale(locale)
-            resources.updateConfiguration(config, resources.displayMetrics)
+        SectionHeader(title = stringResource(R.string.section_world_music), compact = true)
 
-            val systemTheme = isSystemInDarkTheme()
-            val useDarkTheme = when (state.theme) {
-                "dark" -> true
-                "light" -> false
-                else -> systemTheme
-            }
-
-            var showSplash by remember { mutableStateOf(true) }
-
-            KipotifyTheme(darkTheme = useDarkTheme) {
-                val layoutDirection = if (state.language == "fa") LayoutDirection.Rtl else LayoutDirection.Ltr
-                CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-                    AnimatedContent(
-                        targetState = showSplash,
-                        transitionSpec = {
-                            fadeIn(animationSpec = tween(400)) togetherWith fadeOut(animationSpec = tween(450))
-                        },
-                        label = "Splash To App Transition"
-                    ) { isSplash ->
-                        if (isSplash) {
-                            SplashScreen(onTimeout = { showSplash = false })
-                        } else {
-                            AppShell(state = state, onEvent = viewModel::onEvent)
-                        }
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 156.dp),
+            contentPadding = PaddingValues(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            items(genres) { genre ->
+                Card(
+                    modifier = Modifier
+                        .height(112.dp)
+                        .shadowScale(),
+                    shape = MaterialTheme.shapes.large,
+                    onClick = { onCategorySelect(genre.first) }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(genre.second, genre.second.copy(alpha = 0.5f))
+                                )
+                            )
+                            .padding(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LibraryMusic,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.72f),
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(28.dp)
+                        )
+                        Text(
+                            text = genre.first,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.align(Alignment.BottomStart)
+                        )
                     }
                 }
             }
