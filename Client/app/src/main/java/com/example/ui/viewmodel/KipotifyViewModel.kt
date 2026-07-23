@@ -36,6 +36,7 @@ data class KipotifyUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val backendConnection: BackendConnectionState = BackendConnectionState.Discovering,
+    val backendConnectionNoticeId: Long = 0L,
     
     // Player values
     val currentTrack: Track? = null,
@@ -90,8 +91,13 @@ class KipotifyViewModel(
         refreshStartupData()
 
         viewModelScope.launch {
-            getApplication<KipotifyApplication>().backendDiscovery.connectionState.collect { connection ->
-                _uiState.update { it.copy(backendConnection = connection) }
+            getApplication<KipotifyApplication>().backendDiscovery.connectionNotice.collect { notice ->
+                _uiState.update {
+                    it.copy(
+                        backendConnection = notice.connection,
+                        backendConnectionNoticeId = notice.id,
+                    )
+                }
             }
         }
 

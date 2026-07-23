@@ -57,6 +57,11 @@ sealed interface BackendConnectionState {
     }
 }
 
+data class BackendConnectionNotice(
+    val id: Long,
+    val connection: BackendConnectionState,
+)
+
 data class LanBackendEndpoint(
     val id: String,
     val baseUrl: String,
@@ -82,6 +87,11 @@ class BackendEndpointRegistry(
 
     private val _connectionState = MutableStateFlow<BackendConnectionState>(BackendConnectionState.Discovering)
     val connectionState: StateFlow<BackendConnectionState> = _connectionState.asStateFlow()
+    private var nextConnectionNoticeId = 1L
+    private val _connectionNotice = MutableStateFlow(
+        BackendConnectionNotice(id = 0L, connection = BackendConnectionState.Discovering)
+    )
+    val connectionNotice: StateFlow<BackendConnectionNotice> = _connectionNotice.asStateFlow()
 
     @Synchronized
     fun requestCandidates(): List<String> = buildList {
@@ -99,7 +109,7 @@ class BackendEndpointRegistry(
         val preferred = selectPreferredLanEndpoint() ?: endpoint
         activeEndpoint = preferred.baseUrl
         settingsManager.setLastLanBackend(preferred.baseUrl)
-        _connectionState.value = BackendConnectionState.Connected(preferred.baseUrl)
+        updateConnectionState(BackendConnectionState.Connected(preferred.baseUrl))
     }
 
     @Synchronized
@@ -110,11 +120,11 @@ class BackendEndpointRegistry(
             if (replacement != null) {
                 activeEndpoint = replacement.baseUrl
                 settingsManager.setLastLanBackend(replacement.baseUrl)
-                _connectionState.value = BackendConnectionState.Connected(replacement.baseUrl)
+                updateConnectionState(BackendConnectionState.Connected(replacement.baseUrl))
             } else {
                 activeEndpoint = configuredEndpoints.first()
                 settingsManager.clearLastLanBackend()
-                _connectionState.value = BackendConnectionState.Reconnecting(removed.baseUrl)
+                updateConnectionState(BackendConnectionState.Reconnecting(removed.baseUrl))
             }
         }
     }
@@ -125,50 +135,60 @@ class BackendEndpointRegistry(
         val staleActive = previous.firstOrNull { it.baseUrl == activeEndpoint }?.baseUrl
         activeEndpoint = configuredEndpoints.first()
         settingsManager.clearLastLanBackend()
-        _connectionState.value = BackendConnectionState.Reconnecting(staleActive)
+        updateConnectionState(BackendConnectionState.Reconnecting(staleActive))
     }
 
     @Synchronized
     fun discoveryStarted() {
-        if (lanEndpoints.isEmpty()) _connectionState.value = BackendConnectionState.Discovering
+        if (lanEndpoints.isEmpty()) updateConnectionState(BackendConnectionState.Discovering)
     }
 
     @Synchronized
     fun discoveryUnavailable(reason: String) {
-        if (lanEndpoints.isEmpty()) _connectionState.value = BackendConnectionState.Unavailable(reason)
+        if (lanEndpoints.isEmpty()) updateConnectionState(BackendConnectionState.Unavailable(reason))
     }
 
     @Synchronized
     fun discoveryProblem(reason: String) {
-        if (lanEndpoints.isEmpty()) _connectionState.value = BackendConnectionState.Unavailable(reason)
+        if (lanEndpoints.isEmpty()) updateConnectionState(BackendConnectionState.Unavailable(reason))
     }
 
     @Synchronized
     internal fun discoveryTimedOut(diagnostics: DiscoveryDiagnostics) {
         if (!lanEndpoints.isEmpty()) return
-        _connectionState.value = BackendConnectionState.Fallback(
-            when {
-                diagnostics.insecureAdvertisementRejected ->
-                    "A local server advertised HTTP, but the security policy requires HTTPS. Using the configured server."
-                diagnostics.unusableAddressReceived ->
-                    "A local service resolved only to stale or unusable addresses. Using the configured server."
-                diagnostics.differentSubnet ->
-                    "The phone and discovered server appear to be on different subnets. Using the configured server."
-                diagnostics.healthCheckFailed ->
-                    "A local server was resolved, but its health check failed. Using the configured server."
-                !diagnostics.advertisementReceived ->
-                    "No local service advertisement was received; multicast may be blocked by AP isolation or a firewall. Using the configured server."
-                else ->
-                    "No healthy local Kipotify server was found. Using the configured server."
-            }
+        updateConnectionState(
+            BackendConnectionState.Fallback(
+                when {
+                    diagnostics.insecureAdvertisementRejected ->
+                        "A local server advertised HTTP, but the security policy requires HTTPS. Using the configured server."
+                    diagnostics.unusableAddressReceived ->
+                        "A local service resolved only to stale or unusable addresses. Using the configured server."
+                    diagnostics.differentSubnet ->
+                        "The phone and discovered server appear to be on different subnets. Using the configured server."
+                    diagnostics.healthCheckFailed ->
+                        "A local server was resolved, but its health check failed. Using the configured server."
+                    !diagnostics.advertisementReceived ->
+                        "No local service advertisement was received; multicast may be blocked by AP isolation or a firewall. Using the configured server."
+                    else ->
+                        "No healthy local Kipotify server was found. Using the configured server."
+                }
+            )
         )
     }
 
     @Synchronized
     fun transportFailed(baseUrl: String) {
         if (activeEndpoint == baseUrl && lanEndpoints.values().any { it.baseUrl == baseUrl }) {
-            _connectionState.value = BackendConnectionState.Reconnecting(baseUrl)
+            updateConnectionState(BackendConnectionState.Reconnecting(baseUrl))
         }
+    }
+
+    private fun updateConnectionState(connection: BackendConnectionState) {
+        _connectionState.value = connection
+        _connectionNotice.value = BackendConnectionNotice(
+            id = nextConnectionNoticeId++,
+            connection = connection,
+        )
     }
 
     private fun selectPreferredLanEndpoint(): LanBackendEndpoint? = lanEndpoints.values().maxWithOrNull(
@@ -211,6 +231,7 @@ class LanBackendDiscovery(
     private val endpointRegistry: BackendEndpointRegistry,
 ) {
     val connectionState: StateFlow<BackendConnectionState> = endpointRegistry.connectionState
+    val connectionNotice: StateFlow<BackendConnectionNotice> = endpointRegistry.connectionNotice
 
     private val applicationContext = context.applicationContext
     private val nsdManager = applicationContext.getSystemService(NsdManager::class.java)

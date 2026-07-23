@@ -57,6 +57,8 @@ import com.example.data.model.Friend
 import com.example.data.model.Message
 import com.example.data.model.Track
 import com.example.data.remote.BackendConnectionState
+import com.example.ui.notification.AutoDismissNotificationController
+import com.example.ui.notification.NotificationTimerHandle
 import com.example.ui.theme.KipotifyTheme
 import com.example.ui.viewmodel.KipotifyEvent
 import com.example.ui.viewmodel.KipotifyUiState
@@ -65,8 +67,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.ui.viewmodel.KipotifyViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+
+private const val CONNECTION_NOTIFICATION_DURATION_MILLIS = 4_500L
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -138,10 +143,40 @@ fun AppShell(
     var showChatDialog by remember { mutableStateOf(false) }
     var showUpgradeDialog by remember { mutableStateOf(false) }
     var activeCategoryDetail by remember { mutableStateOf<String?>(null) }
+    var visibleConnectionNotification by remember {
+        mutableStateOf<BackendConnectionState?>(null)
+    }
+    val notificationScope = rememberCoroutineScope()
+    val connectionNotificationController = remember(notificationScope) {
+        AutoDismissNotificationController<BackendConnectionState>(
+            durationMillis = CONNECTION_NOTIFICATION_DURATION_MILLIS,
+            scheduleDismiss = { delayMillis, onElapsed ->
+                val timerJob = notificationScope.launch {
+                    delay(delayMillis)
+                    onElapsed()
+                }
+                NotificationTimerHandle { timerJob.cancel() }
+            },
+            onNotificationChanged = { visibleConnectionNotification = it },
+        )
+    }
 
     // Upgrade premium dialog trigger from download block
     LaunchedEffect(state.isPremium) {
         if (state.isPremium) showUpgradeDialog = false
+    }
+
+    LaunchedEffect(state.backendConnectionNoticeId) {
+        when (val connection = state.backendConnection) {
+            is BackendConnectionState.Connected -> connectionNotificationController.dismiss()
+            else -> connectionNotificationController.show(connection)
+        }
+    }
+
+    DisposableEffect(connectionNotificationController) {
+        onDispose {
+            connectionNotificationController.dispose()
+        }
     }
 
     Scaffold(
@@ -328,13 +363,13 @@ fun AppShell(
                 }
             }
 
-            if (state.backendConnection !is BackendConnectionState.Connected) {
+            visibleConnectionNotification?.let { connectionNotification ->
                 Surface(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     shape = RoundedCornerShape(12.dp),
-                    color = if (state.backendConnection is BackendConnectionState.Unavailable) {
+                    color = if (connectionNotification is BackendConnectionState.Unavailable) {
                         MaterialTheme.colorScheme.errorContainer
                     } else {
                         MaterialTheme.colorScheme.secondaryContainer
@@ -342,9 +377,9 @@ fun AppShell(
                     tonalElevation = 3.dp
                 ) {
                     Text(
-                        text = state.backendConnection.message,
+                        text = connectionNotification.message,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        color = if (state.backendConnection is BackendConnectionState.Unavailable) {
+                        color = if (connectionNotification is BackendConnectionState.Unavailable) {
                             MaterialTheme.colorScheme.onErrorContainer
                         } else {
                             MaterialTheme.colorScheme.onSecondaryContainer
