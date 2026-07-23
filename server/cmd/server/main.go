@@ -12,6 +12,7 @@ import (
 
 	"kipotify/internal/config"
 	"kipotify/internal/database"
+	"kipotify/internal/lan"
 	"kipotify/internal/repository"
 	"kipotify/internal/service"
 	httptransport "kipotify/internal/transport/http"
@@ -52,10 +53,28 @@ func main() {
 		Handler:           httptransport.NewRouter(app, cfg),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	advertiser, err := lan.StartAdvertisement(cfg)
+	if err != nil {
+		slog.Warn("mDNS advertisement disabled", "error", err)
+	} else if advertiser != nil {
+		defer advertiser.Shutdown()
+		slog.Info("kipotify backend advertised on local network", "service", "_kipotify._tcp")
+	} else {
+		slog.Info("mDNS advertisement disabled; configure TLS or explicitly allow insecure development advertisement")
+	}
 
 	go func() {
 		slog.Info("kipotify backend listening", "addr", server.Addr)
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		serve := server.ListenAndServe
+		if cfg.TLSCertFile != "" || cfg.TLSKeyFile != "" {
+			if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" {
+				slog.Error("both TLS_CERT_FILE and TLS_KEY_FILE must be configured together")
+				stop()
+				return
+			}
+			serve = func() error { return server.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile) }
+		}
+		if err := serve(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server failed", "error", err)
 			stop()
 		}
