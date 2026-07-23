@@ -52,6 +52,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.example.data.local.artwork.embeddedArtwork
 import com.example.data.model.Friend
 import com.example.data.model.Message
 import com.example.data.model.Track
@@ -581,8 +582,8 @@ fun FeaturedCarousel(
                     onClick = { onEvent(KipotifyEvent.OnPlayTrack(track, tracks)) }
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
-                        AsyncImage(
-                            model = track.coverImageUrl,
+                        SongArtworkImage(
+                            track = track,
                             contentDescription = track.title,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
@@ -1350,8 +1351,8 @@ fun NowPlayingScreen(
                 },
             contentAlignment = Alignment.Center
         ) {
-            AsyncImage(
-                model = track.coverImageUrl,
+            SongArtworkImage(
+                track = track,
                 contentDescription = track.title,
                 modifier = Modifier
                     .size(coverSize)
@@ -1641,10 +1642,11 @@ fun SocialChatHub(
                                                                 modifier = Modifier.padding(8.dp),
                                                                 verticalAlignment = Alignment.CenterVertically
                                                             ) {
-                                                                AsyncImage(
-                                                                    model = msg.sharedTrack.coverImageUrl,
+                                                                SongArtworkImage(
+                                                                    track = msg.sharedTrack,
                                                                     contentDescription = msg.sharedTrack.title,
-                                                                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp))
+                                                                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(4.dp)),
+                                                                    contentScale = ContentScale.Crop
                                                                 )
                                                                 Spacer(modifier = Modifier.width(8.dp))
                                                                 Column {
@@ -1860,13 +1862,48 @@ fun TrackArtwork(
             .clip(MaterialTheme.shapes.small)
             .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        AsyncImage(
-            model = track.coverImageUrl,
+        SongArtworkImage(
+            track = track,
             contentDescription = track.title,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
     }
+}
+
+@Composable
+private fun SongArtworkImage(
+    track: Track,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Fit
+) {
+    val artworkModels = remember(
+        track.artworkSource,
+        track.audioUrl,
+        track.localFilePath,
+        track.coverImageUrl,
+        track.fallbackArtworkUrl
+    ) {
+        buildList<Any> {
+            track.embeddedArtwork()?.let(::add)
+            track.coverImageUrl.takeIf(String::isNotBlank)?.let(::add)
+            track.fallbackArtworkUrl
+                .takeIf { it.isNotBlank() && it != track.coverImageUrl }
+                ?.let(::add)
+        }
+    }
+    var artworkIndex by remember(artworkModels) { mutableIntStateOf(0) }
+
+    AsyncImage(
+        model = artworkModels.getOrNull(artworkIndex),
+        contentDescription = contentDescription,
+        modifier = modifier,
+        contentScale = contentScale,
+        onError = {
+            if (artworkIndex < artworkModels.lastIndex) artworkIndex += 1
+        }
+    )
 }
 
 @Composable

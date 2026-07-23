@@ -2,16 +2,23 @@ package com.example.playback
 
 import android.content.Context
 import android.net.Uri
+import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.example.data.local.artwork.EmbeddedArtworkLoader
+import com.example.data.local.artwork.embeddedArtwork
 import com.example.data.model.Track
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-class AudioPlayerManager(private val context: Context) {
+class AudioPlayerManager(
+    private val context: Context,
+    private val embeddedArtworkLoader: EmbeddedArtworkLoader
+) {
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     private var exoPlayer: ExoPlayer? = null
@@ -44,6 +51,7 @@ class AudioPlayerManager(private val context: Context) {
     private var positionJob: Job? = null
     private var isCrossFading = false
     private var crossFadeJob: Job? = null
+    private var artworkMetadataJob: Job? = null
 
     init {
         try {
@@ -63,7 +71,7 @@ class AudioPlayerManager(private val context: Context) {
 
                     override fun onPlaybackStateChanged(state: Int) {
                         if (state == Player.STATE_ENDED) {
-                            next()
+                            this@AudioPlayerManager.next()
                         }
                     }
                 })
@@ -101,11 +109,12 @@ class AudioPlayerManager(private val context: Context) {
             try {
                 player.volume = 1.0f
                 player.stop()
-                val mediaItem = MediaItem.fromUri(track.playbackUri())
+                val mediaItem = track.toMediaItem()
                 player.setMediaItem(mediaItem)
                 player.prepare()
                 player.setPlaybackSpeed(_playbackSpeed.value)
                 player.playWhenReady = true
+                updateMediaItemArtwork(track)
             } catch (e: Exception) {
                 // Headless fallback playback simulation
                 _isPlaying.value = true
@@ -146,11 +155,12 @@ class AudioPlayerManager(private val context: Context) {
                 try {
                     player.stop()
                     player.volume = 0f
-                    val mediaItem = MediaItem.fromUri(track.playbackUri())
+                    val mediaItem = track.toMediaItem()
                     player.setMediaItem(mediaItem)
                     player.prepare()
                     player.setPlaybackSpeed(_playbackSpeed.value)
                     player.playWhenReady = true
+                    updateMediaItemArtwork(track)
 
                     // Phase 2: Fade in new track
                     val steps = 8
@@ -233,7 +243,56 @@ class AudioPlayerManager(private val context: Context) {
     }
 
     private fun Track.playbackUri(): Uri {
-        return Uri.parse(audioUrl)
+        val localSource = localFilePath
+        return if (!localSource.isNullOrBlank()) {
+            val parsed = localSource.toUri()
+            if (parsed.scheme == null) Uri.fromFile(java.io.File(localSource)) else parsed
+        } else {
+            audioUrl.toUri()
+        }
+    }
+
+    private fun Track.toMediaItem(loadedArtwork: ByteArray? = null): MediaItem {
+        val artwork = loadedArtwork
+            ?: embeddedArtwork()?.audioUri?.let(embeddedArtworkLoader::cached)
+        val metadataBuilder = MediaMetadata.Builder()
+            .setTitle(title)
+            .setArtist(artistName)
+            .setAlbumTitle(albumTitle.ifBlank { releaseTitle })
+
+        if (artwork != null) {
+            metadataBuilder.setArtworkData(artwork, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
+        } else {
+            coverImageUrl.ifBlank { fallbackArtworkUrl }
+                .takeIf(String::isNotBlank)
+                ?.toUri()
+                ?.let(metadataBuilder::setArtworkUri)
+        }
+
+        return MediaItem.Builder()
+            .setMediaId(id)
+            .setUri(playbackUri())
+            .setMediaMetadata(metadataBuilder.build())
+            .build()
+    }
+
+    private fun updateMediaItemArtwork(track: Track) {
+        artworkMetadataJob?.cancel()
+        val artworkUri = track.embeddedArtwork()?.audioUri ?: return
+        if (embeddedArtworkLoader.cached(artworkUri) != null) return
+
+        artworkMetadataJob = scope.launch {
+            val artwork = embeddedArtworkLoader.load(artworkUri) ?: return@launch
+            if (_currentTrack.value?.id != track.id) return@launch
+
+            val player = exoPlayer ?: return@launch
+            val mediaItemIndex = player.currentMediaItemIndex
+            if (mediaItemIndex >= 0 && player.currentMediaItem?.mediaId == track.id) {
+                // The media URI stays the same, allowing session and notification metadata to
+                // gain the embedded cover without restarting playback.
+                player.replaceMediaItem(mediaItemIndex, track.toMediaItem(artwork))
+            }
+        }
     }
 
     fun cancelSleepTimer() {

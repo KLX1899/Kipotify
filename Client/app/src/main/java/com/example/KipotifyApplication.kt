@@ -1,6 +1,11 @@
 package com.example
 
 import android.app.Application
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import com.example.data.local.artwork.EmbeddedArtworkFetcher
+import com.example.data.local.artwork.EmbeddedArtworkKeyer
+import com.example.data.local.artwork.EmbeddedArtworkLoader
 import com.example.data.local.KipotifyDatabase
 import com.example.data.local.SettingsManager
 import com.example.data.remote.KipotifyApiClient
@@ -12,7 +17,7 @@ import com.example.data.repository.SocialRepository
 import com.example.data.repository.TrackRepository
 import com.example.playback.AudioPlayerManager
 
-class KipotifyApplication : Application() {
+class KipotifyApplication : Application(), ImageLoaderFactory {
     lateinit var database: KipotifyDatabase
         private set
 
@@ -36,6 +41,18 @@ class KipotifyApplication : Application() {
 
     lateinit var audioPlayerManager: AudioPlayerManager
         private set
+
+    val embeddedArtworkLoader by lazy { EmbeddedArtworkLoader(this) }
+
+    override fun newImageLoader(): ImageLoader {
+        return ImageLoader.Builder(this)
+            .components {
+                add(EmbeddedArtworkKeyer())
+                add(EmbeddedArtworkFetcher.Factory(embeddedArtworkLoader))
+            }
+            .crossfade(true)
+            .build()
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -63,6 +80,6 @@ class KipotifyApplication : Application() {
         } else {
             this
         }
-        audioPlayerManager = AudioPlayerManager(attributionContext)
+        audioPlayerManager = AudioPlayerManager(attributionContext, embeddedArtworkLoader)
     }
 }

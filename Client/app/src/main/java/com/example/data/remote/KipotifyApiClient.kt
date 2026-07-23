@@ -24,7 +24,13 @@ object KipotifyApiClient {
     private var activeBaseUrl: String = BuildConfig.KIPOTIFY_BASE_URL
 
     fun absoluteUrl(value: String): String {
-        if (value.isBlank() || value.startsWith("http://") || value.startsWith("https://") || value.startsWith("file://")) {
+        if (value.isBlank() ||
+            value.startsWith("http://") ||
+            value.startsWith("https://") ||
+            value.startsWith("file://") ||
+            value.startsWith("content://") ||
+            value.startsWith("android.resource://")
+        ) {
             return value
         }
         val base = activeBaseUrl.trimEnd('/')

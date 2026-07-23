@@ -3,7 +3,10 @@ package http
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"kipotify/internal/config"
@@ -39,6 +42,7 @@ func NewRouter(app *service.App, cfg config.Config) http.Handler {
 	}))
 
 	r.Get("/healthz", h.health)
+	r.Handle("/media/artwork/*", embeddedArtworkHandler("media/audio"))
 	r.Handle("/media/*", http.StripPrefix("/media/", http.FileServer(http.Dir("media"))))
 	r.Post("/api/auth/register", h.register)
 	r.Post("/api/auth/login", h.login)
@@ -385,15 +389,19 @@ func (h *Handler) sendMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 type compatTrackDTO struct {
-	ID              string  `json:"id"`
-	Title           string  `json:"title"`
-	ArtistName      string  `json:"artistName"`
-	CoverImageURL   string  `json:"coverImageUrl"`
-	AudioURL        string  `json:"audioUrl"`
-	IsLiked         bool    `json:"isLiked"`
-	IsDownloaded    bool    `json:"isDownloaded"`
-	LocalFilePath   *string `json:"localFilePath"`
-	DurationSeconds int     `json:"durationSeconds"`
+	ID                 string  `json:"id"`
+	Title              string  `json:"title"`
+	ArtistName         string  `json:"artistName"`
+	AlbumTitle         string  `json:"albumTitle"`
+	CoverImageURL      string  `json:"coverImageUrl"`
+	FallbackArtworkURL string  `json:"fallbackArtworkUrl"`
+	AudioURL           string  `json:"audioUrl"`
+	AudioFilePath      string  `json:"audioFilePath"`
+	ArtworkSource      string  `json:"artworkSource"`
+	IsLiked            bool    `json:"isLiked"`
+	IsDownloaded       bool    `json:"isDownloaded"`
+	LocalFilePath      *string `json:"localFilePath"`
+	DurationSeconds    int     `json:"durationSeconds"`
 }
 
 type compatFriendDTO struct {
@@ -416,17 +424,40 @@ type compatMessageDTO struct {
 }
 
 func compatTrack(track domain.Track) compatTrackDTO {
-	return compatTrackDTO{
-		ID:              track.ID,
-		Title:           track.Title,
-		ArtistName:      track.ArtistName,
-		CoverImageURL:   track.CoverImageURL,
-		AudioURL:        track.AudioURL,
-		IsLiked:         track.IsLiked,
-		IsDownloaded:    track.IsDownloaded,
-		LocalFilePath:   track.LocalFilePath,
-		DurationSeconds: track.DurationSeconds,
+	coverImageURL := track.CoverImageURL
+	if track.ArtworkSource == "embedded_audio" {
+		if embeddedURL := embeddedArtworkURL(track.AudioFilePath); embeddedURL != "" {
+			coverImageURL = embeddedURL
+		}
 	}
+	return compatTrackDTO{
+		ID:                 track.ID,
+		Title:              track.Title,
+		ArtistName:         track.ArtistName,
+		AlbumTitle:         track.AlbumTitle,
+		CoverImageURL:      coverImageURL,
+		FallbackArtworkURL: track.FallbackArtwork,
+		AudioURL:           track.AudioURL,
+		AudioFilePath:      track.AudioFilePath,
+		ArtworkSource:      track.ArtworkSource,
+		IsLiked:            track.IsLiked,
+		IsDownloaded:       track.IsDownloaded,
+		LocalFilePath:      track.LocalFilePath,
+		DurationSeconds:    track.DurationSeconds,
+	}
+}
+
+func embeddedArtworkURL(audioFilePath string) string {
+	normalized := strings.TrimPrefix(filepath.ToSlash(audioFilePath), "/")
+	const mediaAudioPrefix = "media/audio/"
+	if !strings.HasPrefix(normalized, mediaAudioPrefix) {
+		return ""
+	}
+	relative := strings.TrimPrefix(normalized, mediaAudioPrefix)
+	if relative == "" {
+		return ""
+	}
+	return (&url.URL{Path: "/media/artwork/" + relative}).EscapedPath()
 }
 
 func compatTracks(tracks []domain.Track) []compatTrackDTO {
