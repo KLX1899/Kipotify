@@ -10,13 +10,13 @@ interface SearchHistoryDao {
     fun getRecentSearchHistory(): Flow<List<SearchHistoryEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun insertSearch(query: SearchHistoryEntity)
+    suspend fun insertSearch(query: SearchHistoryEntity)
 
     @Query("DELETE FROM search_history WHERE `query` = :query")
-    fun deleteSearch(query: String)
+    suspend fun deleteSearch(query: String)
 
     @Query("DELETE FROM search_history")
-    fun clearHistory()
+    suspend fun clearHistory()
 }
 
 @Dao

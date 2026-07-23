@@ -1,6 +1,8 @@
 package com.example.ui.viewmodel
 
 import android.app.Application
+import android.database.sqlite.SQLiteException
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -110,9 +112,19 @@ class KipotifyViewModel(
 
         // Observe search history from Room
         viewModelScope.launch {
-            database.searchHistoryDao().getRecentSearchHistory().collect { entities ->
-                _uiState.update { it.copy(searchHistory = entities.map { e -> e.query }) }
-            }
+            database.searchHistoryDao()
+                .getRecentSearchHistory()
+                .catch { error ->
+                    if (error is SQLiteException) {
+                        Log.e(TAG, "Could not read search history.", error)
+                        showTransientError("Could not load search history.")
+                    } else {
+                        throw error
+                    }
+                }
+                .collect { entities ->
+                    _uiState.update { it.copy(searchHistory = entities.map { e -> e.query }) }
+                }
         }
 
         // Observe settings / datastore preferences
@@ -194,12 +206,19 @@ class KipotifyViewModel(
         viewModelScope.launch {
             _searchDebouncedFlow
                 .debounce(500)
-                .collect { query ->
-                    if (query.isNotBlank()) {
-                        database.searchHistoryDao().insertSearch(SearchHistoryEntity(query = query))
+                .map(String::trim)
+                .distinctUntilChanged()
+                .collectLatest { query ->
+                    if (query.isNotEmpty()) {
+                        writeSearchHistory("save query") {
+                            insertSearch(SearchHistoryEntity(query = query))
+                        }
                     }
-                    trackRepository.refreshTracks(search = query.takeIf { it.isNotBlank() })
-                        .onFailure { showTransientError("Could not refresh tracks.") }
+                    trackRepository.refreshTracks(search = query.ifEmpty { null })
+                        .onFailure { error ->
+                            Log.e(TAG, "Could not search tracks for query '$query'.", error)
+                            showTransientError("Could not refresh tracks.")
+                        }
                 }
         }
     }
@@ -287,12 +306,16 @@ class KipotifyViewModel(
             }
             is KipotifyEvent.OnDeleteSearchHistory -> {
                 viewModelScope.launch {
-                    database.searchHistoryDao().deleteSearch(event.query)
+                    writeSearchHistory("delete query") {
+                        deleteSearch(event.query)
+                    }
                 }
             }
             KipotifyEvent.OnClearSearchHistory -> {
                 viewModelScope.launch {
-                    database.searchHistoryDao().clearHistory()
+                    writeSearchHistory("clear history") {
+                        clearHistory()
+                    }
                 }
             }
             KipotifyEvent.OnUpgradePremium -> {
@@ -363,6 +386,18 @@ class KipotifyViewModel(
         }
     }
 
+    private suspend fun writeSearchHistory(
+        operation: String,
+        block: suspend com.example.data.local.daos.SearchHistoryDao.() -> Unit,
+    ) {
+        try {
+            database.searchHistoryDao().block()
+        } catch (error: SQLiteException) {
+            Log.e(TAG, "Could not $operation.", error)
+            showTransientError("Could not update search history.")
+        }
+    }
+
     class Factory(private val application: KipotifyApplication) : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(KipotifyViewModel::class.java)) {
@@ -379,5 +414,9 @@ class KipotifyViewModel(
             }
             throw IllegalArgumentException("Unknown ViewModel class")
         }
+    }
+
+    private companion object {
+        const val TAG = "KipotifyViewModel"
     }
 }

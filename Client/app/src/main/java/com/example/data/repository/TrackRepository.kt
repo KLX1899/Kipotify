@@ -8,6 +8,7 @@ import com.example.data.local.entities.LikedSongEntity
 import com.example.data.model.Track
 import com.example.data.remote.KipotifyApiClient
 import com.example.data.remote.KipotifyApiService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +17,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.atomic.AtomicLong
 
 class TrackRepository(
     private val context: Context,
@@ -24,6 +26,7 @@ class TrackRepository(
     private val downloadedSongDao: DownloadedSongDao
 ) {
     private val remoteTracks = MutableStateFlow<List<Track>>(emptyList())
+    private val refreshGeneration = AtomicLong(0L)
 
     fun getTracksFlow(): Flow<List<Track>> {
         val likedFlow = likedSongDao.getAllLikedSongs()
@@ -43,17 +46,30 @@ class TrackRepository(
         }
     }
 
-    suspend fun refreshTracks(search: String? = null, genre: String? = null): Result<List<Track>> =
-        withContext(Dispatchers.IO) {
-            runCatching {
-                api.getTracks(genre = genre, search = search)
+    suspend fun refreshTracks(search: String? = null, genre: String? = null): Result<List<Track>> {
+        val generation = refreshGeneration.incrementAndGet()
+        return withContext(Dispatchers.IO) {
+            try {
+                val tracks = api.getTracks(genre = genre, search = search)
                     .map { it.toTrack() }
+                    .filter { it.id.isNotBlank() }
+                    .distinctBy { it.id }
                     .map(::normalizeTrackUrls)
-                    .also { remoteTracks.value = it }
-            }.onFailure {
-                remoteTracks.value = emptyList()
+
+                if (refreshGeneration.get() == generation) {
+                    remoteTracks.value = tracks
+                }
+                Result.success(tracks)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                if (refreshGeneration.get() == generation) {
+                    remoteTracks.value = emptyList()
+                }
+                Result.failure(error)
             }
         }
+    }
 
     suspend fun getTrackById(trackId: String): Result<Track> = withContext(Dispatchers.IO) {
         runCatching {

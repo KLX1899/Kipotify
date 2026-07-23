@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.data.local.artwork.embeddedArtwork
 import com.example.data.model.Friend
@@ -82,7 +83,7 @@ class MainActivity : ComponentActivity() {
             val viewModel: KipotifyViewModel = viewModel(
                 factory = KipotifyViewModel.Factory(app)
             )
-            val state by viewModel.uiState.collectAsState()
+            val state by viewModel.uiState.collectAsStateWithLifecycle()
 
             // Request Notification Permission on Android 13/14+
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
