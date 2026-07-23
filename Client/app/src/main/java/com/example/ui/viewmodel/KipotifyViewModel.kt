@@ -42,7 +42,6 @@ data class KipotifyUiState(
     val isPlaying: Boolean = false,
     val playbackPosition: Long = 0L,
     val durationMs: Long = 0L,
-    val playbackSpeed: Float = 1.0f,
     val sleepTimerRemaining: Long = 0L,
     val visualizerWaves: List<Float> = List(16) { 0.1f },
     val playerDominantColor: Long = 0xFF1E293B
@@ -65,7 +64,6 @@ sealed interface KipotifyEvent {
     data class OnSetLanguage(val lang: String) : KipotifyEvent
     data class OnSetTheme(val theme: String) : KipotifyEvent
     data class OnSetSleepTimer(val minutes: Int) : KipotifyEvent
-    data class OnSetPlaybackSpeed(val speed: Float) : KipotifyEvent
     data class OnToggleFollow(val friendId: String) : KipotifyEvent
     data class OnSendMessage(val content: String, val sharedTrack: Track? = null) : KipotifyEvent
     data class OnOpenChatWithFriend(val friend: Friend?) : KipotifyEvent
@@ -168,11 +166,6 @@ class KipotifyViewModel(
         viewModelScope.launch {
             audioPlayerManager.durationMs.collect { duration ->
                 _uiState.update { it.copy(durationMs = duration) }
-            }
-        }
-        viewModelScope.launch {
-            audioPlayerManager.playbackSpeed.collect { speed ->
-                _uiState.update { it.copy(playbackSpeed = speed) }
             }
         }
         viewModelScope.launch {
@@ -320,9 +313,6 @@ class KipotifyViewModel(
             }
             is KipotifyEvent.OnSetSleepTimer -> {
                 audioPlayerManager.setSleepTimer(event.minutes)
-            }
-            is KipotifyEvent.OnSetPlaybackSpeed -> {
-                audioPlayerManager.setSpeed(event.speed)
             }
             is KipotifyEvent.OnToggleFollow -> {
                 viewModelScope.launch {

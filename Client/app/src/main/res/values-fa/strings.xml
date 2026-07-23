@@ -68,7 +68,6 @@
     <string name="sleep_timer">تایمر خواب</string>
     <string name="sleep_timer_set">تایمر خواب برای %d دقیقه دیگر تنظیم شد</string>
     <string name="sleep_timer_off">تایمر خواب غیرفعال</string>
-    <string name="playback_speed">سرعت پخش</string>
     
     <!-- Social Network & Chat -->
     <string name="social_tab">شبکه اجتماعی</string>

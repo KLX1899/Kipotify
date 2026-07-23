@@ -37,9 +37,6 @@ class AudioPlayerManager(
     private val _durationMs = MutableStateFlow(0L)
     val durationMs: StateFlow<Long> = _durationMs.asStateFlow()
 
-    private val _playbackSpeed = MutableStateFlow(1.0f)
-    val playbackSpeed: StateFlow<Float> = _playbackSpeed.asStateFlow()
-
     private val _sleepTimerRemaining = MutableStateFlow(0L) // in seconds
     val sleepTimerRemaining: StateFlow<Long> = _sleepTimerRemaining.asStateFlow()
 
@@ -126,7 +123,6 @@ class AudioPlayerManager(
                 val mediaItem = track.toMediaItem()
                 player.setMediaItem(mediaItem)
                 player.prepare()
-                player.setPlaybackSpeed(_playbackSpeed.value)
                 player.playWhenReady = true
                 updateMediaItemArtwork(track)
             } catch (e: Exception) {
@@ -171,7 +167,6 @@ class AudioPlayerManager(
                     val mediaItem = track.toMediaItem()
                     player.setMediaItem(mediaItem)
                     player.prepare()
-                    player.setPlaybackSpeed(_playbackSpeed.value)
                     player.playWhenReady = true
                     updateMediaItemArtwork(track)
 
@@ -230,11 +225,6 @@ class AudioPlayerManager(
         var prevIndex = currentIndex - 1
         if (prevIndex < 0) prevIndex = playlist.size - 1
         playTrack(playlist[prevIndex])
-    }
-
-    fun setSpeed(speed: Float) {
-        _playbackSpeed.value = speed
-        exoPlayer?.setPlaybackSpeed(speed)
     }
 
     fun setSleepTimer(minutes: Int) {
@@ -352,8 +342,7 @@ class AudioPlayerManager(
                         ?.durationSeconds
                         ?.takeIf { it > 0 }
                         ?.times(1000L)
-                    val nextPosition = _playbackPosition.value +
-                        (1000 * _playbackSpeed.value).toLong()
+                    val nextPosition = _playbackPosition.value + 1000L
                     _playbackPosition.value = simulatedDuration
                         ?.let(nextPosition::coerceAtMost)
                         ?: nextPosition

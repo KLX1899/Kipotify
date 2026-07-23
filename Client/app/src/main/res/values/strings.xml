@@ -68,7 +68,6 @@
     <string name="sleep_timer">Sleep Timer</string>
     <string name="sleep_timer_set">Timer set for %d minutes</string>
     <string name="sleep_timer_off">Sleep Timer Off</string>
-    <string name="playback_speed">Playback Speed</string>
     
     <!-- Social Network & Chat -->
     <string name="social_tab">Social Chat</string>

@@ -1278,6 +1278,10 @@ fun NowPlayingScreen(
     onDismiss: () -> Unit
 ) {
     val track = state.currentTrack ?: return
+    val isCurrentTrackLiked = state.tracks
+        .firstOrNull { it.id == track.id }
+        ?.isLiked
+        ?: track.isLiked
     
     // Smooth infinite rotation for disc CD
     val infiniteTransition = rememberInfiniteTransition()
@@ -1437,8 +1441,16 @@ fun NowPlayingScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { onEvent(KipotifyEvent.OnSetPlaybackSpeed(if (state.playbackSpeed == 1.0f) 1.5f else if (state.playbackSpeed == 1.5f) 2.0f else 1.0f)) }) {
-                Text(text = "${state.playbackSpeed}x", color = Color.White, fontWeight = FontWeight.Bold)
+            IconButton(onClick = { onEvent(KipotifyEvent.OnToggleLike(track.id)) }) {
+                Icon(
+                    imageVector = if (isCurrentTrackLiked) {
+                        Icons.Default.Favorite
+                    } else {
+                        Icons.Default.FavoriteBorder
+                    },
+                    contentDescription = "Like Song",
+                    tint = if (isCurrentTrackLiked) MaterialTheme.colorScheme.primary else Color.White
+                )
             }
             IconButton(onClick = { onEvent(KipotifyEvent.OnPrevTrack) }) {
                 Icon(Icons.Default.SkipPrevious, contentDescription = "Previous Track", tint = Color.White, modifier = Modifier.size(36.dp))
