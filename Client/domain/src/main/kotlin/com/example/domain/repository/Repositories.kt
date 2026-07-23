@@ -5,6 +5,7 @@ import com.example.domain.model.Friend
 import com.example.domain.model.Message
 import com.example.domain.model.Track
 import com.example.domain.model.UserProfile
+import com.example.domain.model.LyricsLoadResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -15,6 +16,10 @@ interface TrackRepository {
     suspend fun recordPlay(trackId: String): Result<Unit>
     suspend fun downloadTrack(trackId: String, onProgress: (Int) -> Unit = {}): Boolean
     suspend fun removeDownload(trackId: String)
+}
+
+interface LyricsRepository {
+    suspend fun loadLyrics(trackId: String, lyricsUrl: String): LyricsLoadResult
 }
 
 interface SocialRepository {

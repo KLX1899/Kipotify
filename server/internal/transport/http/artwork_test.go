@@ -75,6 +75,21 @@ func TestCompatTrackExposesServerEmbeddedArtwork(t *testing.T) {
 	}
 }
 
+func TestCompatTrackExposesLyricsMetadata(t *testing.T) {
+	dto := compatTrack(domain.Track{
+		ID:             "track-1",
+		LyricsURL:      "/media/lyrics/Artist/Album/Song.lrc",
+		LyricsFilePath: "media/lyrics/Artist/Album/Song.lrc",
+	})
+
+	if dto.LyricsURL != "/media/lyrics/Artist/Album/Song.lrc" {
+		t.Fatalf("lyrics URL was dropped: %q", dto.LyricsURL)
+	}
+	if dto.LyricsFilePath != "media/lyrics/Artist/Album/Song.lrc" {
+		t.Fatalf("lyrics file path was dropped: %q", dto.LyricsFilePath)
+	}
+}
+
 func TestResolveAudioPathRejectsTraversal(t *testing.T) {
 	if _, ok := resolveAudioPath(t.TempDir(), "../../secret.mp3"); ok {
 		t.Fatal("path traversal was accepted")

@@ -8,9 +8,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -18,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Subject
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -58,12 +62,15 @@ import com.example.domain.model.BackendConnection
 import com.example.domain.model.Friend
 import com.example.domain.model.Message
 import com.example.domain.model.Track
+import com.example.domain.lyrics.activeLyricIndex
+import com.example.domain.model.LyricLine
 import com.example.playback.artwork.embeddedArtwork
 import com.example.ui.notification.AutoDismissNotificationController
 import com.example.ui.notification.NotificationTimerHandle
 import com.example.ui.theme.KipotifyTheme
 import com.example.ui.viewmodel.KipotifyEvent
 import com.example.ui.viewmodel.KipotifyUiState
+import com.example.ui.viewmodel.LyricsUiState
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -149,6 +156,7 @@ fun NowPlayingScreen(
     onDismiss: () -> Unit
 ) {
     val track = state.currentTrack ?: return
+    var showLyrics by remember(track.id) { mutableStateOf(false) }
     val isCurrentTrackLiked = state.tracks
         .firstOrNull { it.id == track.id }
         ?.isLiked
@@ -190,166 +198,333 @@ fun NowPlayingScreen(
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
         ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onDismiss) {
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Close Player", tint = Color.White)
-            }
-            Text(
-                text = stringResource(R.string.now_playing),
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleMedium
-            )
-            IconButton(onClick = { onEvent(KipotifyEvent.OnSendMessage("آهنگ رو برات به اشتراک گذاشتم!", track)) }) {
-                Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White)
-            }
-        }
-
-        // Animated Rotating Vinyl CD Disc
-        Box(
-            modifier = Modifier
-                .size(discSize)
-                .rotate(actualAngle)
-                .drawBehind {
-                    // Draw outer black grooves
-                    drawCircle(Color.Black, radius = size.minDimension / 2)
-                    drawCircle(Color.Gray.copy(alpha = 0.3f), radius = size.minDimension / 2 - 10f, style = Stroke(width = 1f))
-                    drawCircle(Color.Gray.copy(alpha = 0.3f), radius = size.minDimension / 2 - 30f, style = Stroke(width = 1f))
-                    drawCircle(Color.Gray.copy(alpha = 0.3f), radius = size.minDimension / 2 - 50f, style = Stroke(width = 1f))
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            SongArtworkImage(
-                track = track,
-                contentDescription = track.title,
-                modifier = Modifier
-                    .size(coverSize)
-                    .clip(CircleShape)
-                    .border(4.dp, Color.Black, CircleShape),
-                contentScale = ContentScale.Crop
-            )
-            // Center pin hole
-            Box(
-                modifier = Modifier
-                    .size(20.dp)
-                    .background(Color(0xFF0F172A), CircleShape)
-                    .border(1.dp, Color.LightGray, CircleShape)
-            )
-        }
-
-        // Metadata Info Block
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = track.title,
-                color = Color.White,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = track.artistName,
-                color = Color.White.copy(alpha = 0.7f),
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-
-        // Custom drawn Canvas Audio Wave visualizer
-        AudioVisualizerCanvas(
-            waves = state.visualizerWaves,
-            isPlaying = state.isPlaying,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp)
-        )
-
-        // Progress Seek Bar
-        val maxMs = state.durationMs
-        var draggingPosition by remember(track.id) { mutableStateOf<Float?>(null) }
-        val currentSliderValue = draggingPosition ?: state.playbackPosition.toFloat()
-
-        Column {
-            Slider(
-                value = currentSliderValue.coerceIn(0f, maxMs.toFloat()),
-                onValueChange = { draggingPosition = it },
-                onValueChangeFinished = {
-                    draggingPosition?.let {
-                        onEvent(KipotifyEvent.OnSeekTo(it.toLong()))
-                    }
-                    draggingPosition = null
-                },
-                valueRange = 0f..maxMs.toFloat(),
-                enabled = maxMs > 0L,
-                colors = SliderDefaults.colors(
-                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = Color.White.copy(alpha = 0.3f)
-                )
-            )
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(formatTime(currentSliderValue.toLong()), color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
-                Text(formatTime(maxMs), color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Close Player", tint = Color.White)
+                }
+                Text(
+                    text = if (showLyrics) stringResource(R.string.lyrics) else stringResource(R.string.now_playing),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                IconButton(onClick = { onEvent(KipotifyEvent.OnSendMessage("آهنگ رو برات به اشتراک گذاشتم!", track)) }) {
+                    Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White)
+                }
             }
-        }
 
-        // Main Controls Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = { onEvent(KipotifyEvent.OnToggleLike(track.id)) }) {
-                Icon(
-                    imageVector = if (isCurrentTrackLiked) {
-                        Icons.Default.Favorite
-                    } else {
-                        Icons.Default.FavoriteBorder
-                    },
-                    contentDescription = "Like Song",
-                    tint = if (isCurrentTrackLiked) MaterialTheme.colorScheme.primary else Color.White
-                )
-            }
-            IconButton(onClick = { onEvent(KipotifyEvent.OnPrevTrack) }) {
-                Icon(Icons.Default.SkipPrevious, contentDescription = "Previous Track", tint = Color.White, modifier = Modifier.size(36.dp))
-            }
-            IconButton(
-                onClick = { onEvent(KipotifyEvent.OnTogglePlay) },
+            AnimatedContent(
+                targetState = showLyrics,
                 modifier = Modifier
-                    .size(64.dp)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                    .fillMaxWidth()
+                    .weight(1f),
+                transitionSpec = {
+                    fadeIn(tween(250)) togetherWith fadeOut(tween(200))
+                },
+                label = "Now playing lyrics transition",
+            ) { lyricsVisible ->
+                if (lyricsVisible) {
+                    LyricsContent(
+                        state = state.lyrics,
+                        playbackPositionMs = state.playbackPosition,
+                        onRetry = { onEvent(KipotifyEvent.OnRetryLyrics) },
+                        onSeekTo = { onEvent(KipotifyEvent.OnSeekTo(it)) },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(discSize)
+                                .rotate(actualAngle)
+                                .drawBehind {
+                                    drawCircle(Color.Black, radius = size.minDimension / 2)
+                                    drawCircle(Color.Gray.copy(alpha = 0.3f), radius = size.minDimension / 2 - 10f, style = Stroke(width = 1f))
+                                    drawCircle(Color.Gray.copy(alpha = 0.3f), radius = size.minDimension / 2 - 30f, style = Stroke(width = 1f))
+                                    drawCircle(Color.Gray.copy(alpha = 0.3f), radius = size.minDimension / 2 - 50f, style = Stroke(width = 1f))
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            SongArtworkImage(
+                                track = track,
+                                contentDescription = track.title,
+                                modifier = Modifier
+                                    .size(coverSize)
+                                    .clip(CircleShape)
+                                    .border(4.dp, Color.Black, CircleShape),
+                                contentScale = ContentScale.Crop
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .background(Color(0xFF0F172A), CircleShape)
+                                    .border(1.dp, Color.LightGray, CircleShape)
+                            )
+                        }
+
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = track.title,
+                                color = Color.White,
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = track.artistName,
+                                color = Color.White.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.titleMedium,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        AudioVisualizerCanvas(
+                            waves = state.visualizerWaves,
+                            isPlaying = state.isPlaying,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp)
+                        )
+                    }
+                }
+            }
+
+            val maxMs = state.durationMs
+            var draggingPosition by remember(track.id) { mutableStateOf<Float?>(null) }
+            val currentSliderValue = draggingPosition ?: state.playbackPosition.toFloat()
+
+            Column {
+                Slider(
+                    value = currentSliderValue.coerceIn(0f, maxMs.toFloat()),
+                    onValueChange = { draggingPosition = it },
+                    onValueChangeFinished = {
+                        draggingPosition?.let {
+                            onEvent(KipotifyEvent.OnSeekTo(it.toLong()))
+                        }
+                        draggingPosition = null
+                    },
+                    valueRange = 0f..maxMs.toFloat(),
+                    enabled = maxMs > 0L,
+                    colors = SliderDefaults.colors(
+                        activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.3f)
+                    )
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(formatTime(currentSliderValue.toLong()), color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+                    Text(formatTime(maxMs), color = Color.White.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = "Play/Pause",
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(32.dp)
+                IconButton(onClick = { onEvent(KipotifyEvent.OnToggleLike(track.id)) }) {
+                    Icon(
+                        imageVector = if (isCurrentTrackLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Like Song",
+                        tint = if (isCurrentTrackLiked) MaterialTheme.colorScheme.primary else Color.White
+                    )
+                }
+                IconButton(onClick = { onEvent(KipotifyEvent.OnPrevTrack) }) {
+                    Icon(Icons.Default.SkipPrevious, contentDescription = "Previous Track", tint = Color.White, modifier = Modifier.size(36.dp))
+                }
+                IconButton(
+                    onClick = { onEvent(KipotifyEvent.OnTogglePlay) },
+                    modifier = Modifier
+                        .size(64.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = "Play/Pause",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+                IconButton(onClick = { onEvent(KipotifyEvent.OnNextTrack) }) {
+                    Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White, modifier = Modifier.size(36.dp))
+                }
+                IconButton(
+                    onClick = { showLyrics = !showLyrics },
+                    modifier = Modifier.testTag("lyrics_toggle"),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Subject,
+                        contentDescription = stringResource(
+                            if (showLyrics) R.string.hide_lyrics else R.string.show_lyrics,
+                        ),
+                        tint = if (showLyrics) MaterialTheme.colorScheme.primary else Color.White,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun LyricsContent(
+    state: LyricsUiState,
+    playbackPositionMs: Long,
+    onRetry: () -> Unit,
+    onSeekTo: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier.testTag("lyrics_content"),
+        contentAlignment = Alignment.Center,
+    ) {
+        when (state) {
+            LyricsUiState.Idle,
+            LyricsUiState.Loading -> Column(
+                modifier = Modifier.testTag("lyrics_loading"),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(28.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 3.dp,
+                )
+                Text(
+                    text = stringResource(R.string.lyrics_loading),
+                    color = Color.White.copy(alpha = 0.8f),
                 )
             }
-            IconButton(onClick = { onEvent(KipotifyEvent.OnNextTrack) }) {
-                Icon(Icons.Default.SkipNext, contentDescription = "Next", tint = Color.White, modifier = Modifier.size(36.dp))
+
+            LyricsUiState.Empty,
+            LyricsUiState.Unavailable -> LyricsMessage(
+                message = stringResource(R.string.lyrics_unavailable),
+                modifier = Modifier.testTag("lyrics_unavailable"),
+            )
+
+            is LyricsUiState.Error -> Column(
+                modifier = Modifier.testTag("lyrics_error"),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                LyricsMessage(stringResource(R.string.lyrics_load_error))
+                TextButton(onClick = onRetry) {
+                    Text(stringResource(R.string.retry))
+                }
             }
-            IconButton(onClick = { onEvent(KipotifyEvent.OnSetSleepTimer(if (state.sleepTimerRemaining == 0L) 15 else 0)) }) {
-                Icon(
-                    imageVector = Icons.Default.Notifications,
-                    contentDescription = "Sleep Timer",
-                    tint = if (state.sleepTimerRemaining > 0L) MaterialTheme.colorScheme.primary else Color.White
+
+            is LyricsUiState.Success -> key(state.lines) {
+                SyncedLyricsList(
+                    lines = state.lines,
+                    playbackPositionMs = playbackPositionMs,
+                    onSeekTo = onSeekTo,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LyricsMessage(
+    message: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = message,
+        modifier = modifier.padding(horizontal = 24.dp),
+        color = Color.White.copy(alpha = 0.85f),
+        style = MaterialTheme.typography.titleMedium,
+        textAlign = TextAlign.Center,
+    )
+}
+
+@Composable
+private fun SyncedLyricsList(
+    lines: List<LyricLine>,
+    playbackPositionMs: Long,
+    onSeekTo: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val listState = rememberLazyListState()
+    val currentPosition by rememberUpdatedState(playbackPositionMs)
+    val activeIndex by remember(lines) {
+        derivedStateOf { activeLyricIndex(lines, currentPosition) }
+    }
+
+    LaunchedEffect(activeIndex) {
+        if (activeIndex >= 0) {
+            var activeItem = listState.layoutInfo.visibleItemsInfo
+                .firstOrNull { it.index == activeIndex }
+            if (activeItem == null) {
+                listState.scrollToItem(activeIndex)
+                withFrameNanos { }
+                activeItem = listState.layoutInfo.visibleItemsInfo
+                    .firstOrNull { it.index == activeIndex }
+            }
+
+            activeItem?.let { item ->
+                val viewportCenter = (
+                    listState.layoutInfo.viewportStartOffset +
+                        listState.layoutInfo.viewportEndOffset
+                    ) / 2
+                val itemCenter = item.offset + item.size / 2
+                listState.animateScrollBy((itemCenter - viewportCenter).toFloat())
+            }
+        }
+    }
+
+    BoxWithConstraints(modifier = modifier) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("lyrics_list"),
+            contentPadding = PaddingValues(vertical = maxHeight / 2),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            itemsIndexed(
+                items = lines,
+                key = { index, line -> "${line.timestampMs}:$index" },
+            ) { index, line ->
+                val isActive = index == activeIndex
+                Text(
+                    text = line.text,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSeekTo(line.timestampMs) }
+                        .testTag(if (isActive) "active_lyric" else "lyric_line_$index")
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                        .animateContentSize(),
+                    color = if (isActive) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        Color.White.copy(alpha = 0.55f)
+                    },
+                    style = if (isActive) {
+                        MaterialTheme.typography.headlineSmall
+                    } else {
+                        MaterialTheme.typography.titleLarge
+                    },
+                    fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.SemiBold,
+                    textAlign = TextAlign.Start,
+                )
+            }
         }
     }
 }

@@ -6,6 +6,8 @@ import com.example.domain.model.Track
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonNames
+import okhttp3.ResponseBody
+import retrofit2.Response
 import retrofit2.http.*
 
 /**
@@ -31,6 +33,9 @@ interface KipotifyApiService {
 
     @GET("api/tracks/{id}")
     suspend fun getTrackById(@Path("id") trackId: String): ApiTrackDto
+
+    @GET
+    suspend fun getLyrics(@Url lyricsUrl: String): Response<ResponseBody>
 
     @POST("api/tracks/{id}/like")
     suspend fun toggleLikeTrack(@Path("id") trackId: String): LikeResponse

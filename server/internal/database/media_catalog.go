@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -22,6 +23,7 @@ var supportedAudioExtensions = map[string]bool{
 
 type mediaTrack struct {
 	path       string
+	lyricsPath string
 	artistName string
 	albumTitle string
 	title      string
@@ -54,7 +56,9 @@ func SyncMediaCatalog(ctx context.Context, pool *pgxpool.Pool, audioRoot string)
 		if ids := existing[key]; len(ids) > 0 {
 			id := ids[0]
 			existing[key] = ids[1:]
-			if _, err := tx.Exec(ctx, `update tracks set audio_file_path=$2, updated_at=now() where id=$1`, id, file.path); err != nil {
+			if _, err := tx.Exec(ctx, `update tracks set audio_file_path=$2,
+				lyrics_file_path=case when $3<>'' then $3 else lyrics_file_path end,
+				updated_at=now() where id=$1`, id, file.path, file.lyricsPath); err != nil {
 				return err
 			}
 			continue
@@ -96,6 +100,7 @@ func discoverMediaTracks(audioRoot string) ([]mediaTrack, error) {
 		title := humanizeMediaName(strings.TrimSuffix(parts[len(parts)-1], filepath.Ext(parts[len(parts)-1])))
 		files = append(files, mediaTrack{
 			path:       "media/audio/" + filepath.ToSlash(relative),
+			lyricsPath: discoverLyricsPath(audioRoot, relative),
 			artistName: artistName,
 			albumTitle: albumTitle,
 			title:      title,
@@ -107,6 +112,16 @@ func discoverMediaTracks(audioRoot string) ([]mediaTrack, error) {
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].path < files[j].path })
 	return files, nil
+}
+
+func discoverLyricsPath(audioRoot, relativeAudioPath string) string {
+	relativeLyricsPath := strings.TrimSuffix(relativeAudioPath, filepath.Ext(relativeAudioPath)) + ".lrc"
+	lyricsRoot := filepath.Join(filepath.Dir(filepath.Clean(audioRoot)), "lyrics")
+	info, err := fs.Stat(os.DirFS(lyricsRoot), filepath.ToSlash(relativeLyricsPath))
+	if err != nil || info.IsDir() {
+		return ""
+	}
+	return "media/lyrics/" + filepath.ToSlash(relativeLyricsPath)
 }
 
 func existingTrackIDs(ctx context.Context, tx pgx.Tx) (map[string][]string, error) {
@@ -159,12 +174,14 @@ func insertMediaTrack(ctx context.Context, tx pgx.Tx, file mediaTrack) error {
 	if err := tx.QueryRow(ctx, `select coalesce((select id from tracks where release_id=$1::uuid and slug=$2 limit 1),$3)`, releaseID, trackSlug, trackID).Scan(&trackID); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `insert into tracks(id,title,slug,release_id,duration,audio_file_path,artwork_source,artist_name,album_title)
-		values($1,$2,$3,$4::uuid,180,$5,'embedded_audio',$6,$7)
+	if _, err := tx.Exec(ctx, `insert into tracks(id,title,slug,release_id,duration,audio_file_path,lyrics_file_path,artwork_source,artist_name,album_title)
+		values($1,$2,$3,$4::uuid,180,$5,$6,'embedded_audio',$7,$8)
 		on conflict(id) do update set title=excluded.title, slug=excluded.slug, release_id=excluded.release_id,
-			audio_file_path=excluded.audio_file_path, artist_name=excluded.artist_name,
+			audio_file_path=excluded.audio_file_path,
+			lyrics_file_path=case when excluded.lyrics_file_path<>'' then excluded.lyrics_file_path else tracks.lyrics_file_path end,
+			artist_name=excluded.artist_name,
 			album_title=excluded.album_title, updated_at=now()`,
-		trackID, file.title, trackSlug, releaseID, file.path, file.artistName, file.albumTitle); err != nil {
+		trackID, file.title, trackSlug, releaseID, file.path, file.lyricsPath, file.artistName, file.albumTitle); err != nil {
 		return err
 	}
 	_, err := tx.Exec(ctx, `insert into track_artists(track_id,artist_id,role,position)

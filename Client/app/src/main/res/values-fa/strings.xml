@@ -68,6 +68,13 @@
     <string name="sleep_timer">تایمر خواب</string>
     <string name="sleep_timer_set">تایمر خواب برای %d دقیقه دیگر تنظیم شد</string>
     <string name="sleep_timer_off">تایمر خواب غیرفعال</string>
+    <string name="lyrics">متن آهنگ</string>
+    <string name="show_lyrics">نمایش متن آهنگ</string>
+    <string name="hide_lyrics">بستن متن آهنگ</string>
+    <string name="lyrics_loading">در حال بارگذاری متن آهنگ…</string>
+    <string name="lyrics_unavailable">متن این آهنگ در دسترس نیست</string>
+    <string name="lyrics_load_error">بارگذاری متن آهنگ انجام نشد</string>
+    <string name="retry">تلاش دوباره</string>
     
     <!-- Social Network & Chat -->
     <string name="social_tab">شبکه اجتماعی</string>

@@ -4,12 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.domain.model.BackendConnection
 import com.example.domain.model.Friend
+import com.example.domain.model.LyricLine
+import com.example.domain.model.LyricsLoadResult
 import com.example.domain.model.Message
 import com.example.domain.model.Track
 import com.example.domain.repository.ConnectionRepository
 import com.example.domain.repository.PlaybackController
 import com.example.domain.usecase.AccountUseCases
 import com.example.domain.usecase.DownloadTrackResult
+import com.example.domain.usecase.LyricsUseCases
 import com.example.domain.usecase.SearchHistoryUseCases
 import com.example.domain.usecase.SocialUseCases
 import com.example.domain.usecase.TrackUseCases
@@ -45,8 +48,18 @@ data class KipotifyUiState(
     val durationMs: Long = 0L,
     val sleepTimerRemaining: Long = 0L,
     val visualizerWaves: List<Float> = List(16) { 0.1f },
-    val playerDominantColor: Long = 0xFF1E293B
+    val playerDominantColor: Long = 0xFF1E293B,
+    val lyrics: LyricsUiState = LyricsUiState.Idle,
 )
+
+sealed interface LyricsUiState {
+    data object Idle : LyricsUiState
+    data object Loading : LyricsUiState
+    data class Success(val lines: List<LyricLine>) : LyricsUiState
+    data object Empty : LyricsUiState
+    data object Unavailable : LyricsUiState
+    data class Error(val message: String? = null) : LyricsUiState
+}
 
 sealed interface KipotifyEvent {
     data class OnTabChanged(val tab: String) : KipotifyEvent
@@ -69,6 +82,7 @@ sealed interface KipotifyEvent {
     data class OnSendMessage(val content: String, val sharedTrack: Track? = null) : KipotifyEvent
     data class OnOpenChatWithFriend(val friend: Friend?) : KipotifyEvent
     data class OnSeekTo(val positionMs: Long) : KipotifyEvent
+    data object OnRetryLyrics : KipotifyEvent
 }
 
 @OptIn(FlowPreview::class)
@@ -78,6 +92,7 @@ class KipotifyViewModel @Inject constructor(
     private val social: SocialUseCases,
     private val account: AccountUseCases,
     private val searchHistory: SearchHistoryUseCases,
+    private val lyrics: LyricsUseCases,
     private val playback: PlaybackController,
     private val connection: ConnectionRepository,
 ) : ViewModel() {
@@ -86,6 +101,7 @@ class KipotifyViewModel @Inject constructor(
     val uiState: StateFlow<KipotifyUiState> = _uiState.asStateFlow()
 
     private val _searchDebouncedFlow = MutableStateFlow("")
+    private val lyricsRetry = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     init {
         refreshStartupData()
@@ -160,9 +176,11 @@ class KipotifyViewModel @Inject constructor(
 
         // Observe media player state flows
         viewModelScope.launch {
-            playback.currentTrack.collect { track ->
-                _uiState.update { it.copy(currentTrack = track) }
-            }
+            combine(
+                playback.currentTrack.distinctUntilChangedBy { it?.id to it?.lyricsUrl },
+                lyricsRetry.onStart { emit(Unit) },
+            ) { track, _ -> track }
+                .collectLatest(::loadLyrics)
         }
         viewModelScope.launch {
             playback.isPlaying.collect { playState ->
@@ -347,6 +365,43 @@ class KipotifyViewModel @Inject constructor(
             }
             is KipotifyEvent.OnSeekTo -> {
                 playback.seekTo(event.positionMs)
+            }
+            KipotifyEvent.OnRetryLyrics -> {
+                lyricsRetry.tryEmit(Unit)
+            }
+        }
+    }
+
+    private suspend fun loadLyrics(track: Track?) {
+        if (track == null) {
+            _uiState.update {
+                it.copy(currentTrack = null, lyrics = LyricsUiState.Idle)
+            }
+            return
+        }
+        if (track.lyricsUrl.isBlank()) {
+            _uiState.update {
+                it.copy(currentTrack = track, lyrics = LyricsUiState.Unavailable)
+            }
+            return
+        }
+
+        _uiState.update {
+            it.copy(currentTrack = track, lyrics = LyricsUiState.Loading)
+        }
+        val loadedState = when (val result = lyrics.load(track.id, track.lyricsUrl)) {
+            is LyricsLoadResult.Success -> LyricsUiState.Success(result.lines)
+            LyricsLoadResult.Empty -> LyricsUiState.Empty
+            LyricsLoadResult.Unavailable -> LyricsUiState.Unavailable
+            is LyricsLoadResult.Error -> LyricsUiState.Error(result.message)
+        }
+        _uiState.update { current ->
+            if (current.currentTrack?.id == track.id &&
+                current.currentTrack.lyricsUrl == track.lyricsUrl
+            ) {
+                current.copy(lyrics = loadedState)
+            } else {
+                current
             }
         }
     }

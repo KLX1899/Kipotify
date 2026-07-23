@@ -397,6 +397,8 @@ type compatTrackDTO struct {
 	FallbackArtworkURL string  `json:"fallbackArtworkUrl"`
 	AudioURL           string  `json:"audioUrl"`
 	AudioFilePath      string  `json:"audioFilePath"`
+	LyricsURL          string  `json:"lyricsUrl,omitempty"`
+	LyricsFilePath     string  `json:"lyricsFilePath,omitempty"`
 	ArtworkSource      string  `json:"artworkSource"`
 	IsLiked            bool    `json:"isLiked"`
 	IsDownloaded       bool    `json:"isDownloaded"`
@@ -439,6 +441,8 @@ func compatTrack(track domain.Track) compatTrackDTO {
 		FallbackArtworkURL: track.FallbackArtwork,
 		AudioURL:           track.AudioURL,
 		AudioFilePath:      track.AudioFilePath,
+		LyricsURL:          track.LyricsURL,
+		LyricsFilePath:     track.LyricsFilePath,
 		ArtworkSource:      track.ArtworkSource,
 		IsLiked:            track.IsLiked,
 		IsDownloaded:       track.IsDownloaded,

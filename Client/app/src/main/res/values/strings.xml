@@ -68,6 +68,13 @@
     <string name="sleep_timer">Sleep Timer</string>
     <string name="sleep_timer_set">Timer set for %d minutes</string>
     <string name="sleep_timer_off">Sleep Timer Off</string>
+    <string name="lyrics">Lyrics</string>
+    <string name="show_lyrics">Show lyrics</string>
+    <string name="hide_lyrics">Hide lyrics</string>
+    <string name="lyrics_loading">Loading lyrics…</string>
+    <string name="lyrics_unavailable">Lyrics aren’t available for this song</string>
+    <string name="lyrics_load_error">Couldn’t load lyrics</string>
+    <string name="retry">Retry</string>
     
     <!-- Social Network & Chat -->
     <string name="social_tab">Social Chat</string>

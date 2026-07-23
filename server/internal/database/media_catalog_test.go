@@ -42,3 +42,46 @@ func TestMediaMatchKeyIgnoresFilenameFormatting(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
+
+func TestDiscoverMediaTracksAssignsExistingLyricsPath(t *testing.T) {
+	mediaRoot := t.TempDir()
+	audioRoot := filepath.Join(mediaRoot, "audio")
+	audioPath := filepath.Join(audioRoot, "DuaLipa", "RadicalOptimism", "Maria.mp3")
+	lyricsPath := filepath.Join(mediaRoot, "lyrics", "DuaLipa", "RadicalOptimism", "Maria.lrc")
+	for _, path := range []string{audioPath, lyricsPath} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("test"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tracks, err := discoverMediaTracks(audioRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tracks[0].lyricsPath; got != "media/lyrics/DuaLipa/RadicalOptimism/Maria.lrc" {
+		t.Fatalf("got lyrics path %q", got)
+	}
+}
+
+func TestDiscoverMediaTracksLeavesLyricsEmptyWhenFileIsMissing(t *testing.T) {
+	mediaRoot := t.TempDir()
+	audioRoot := filepath.Join(mediaRoot, "audio")
+	audioPath := filepath.Join(audioRoot, "Artist", "Song.flac")
+	if err := os.MkdirAll(filepath.Dir(audioPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(audioPath, []byte("test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tracks, err := discoverMediaTracks(audioRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tracks[0].lyricsPath; got != "" {
+		t.Fatalf("got lyrics path %q, want empty", got)
+	}
+}

@@ -3,11 +3,13 @@ package com.example.di
 import android.content.Context
 import com.example.domain.repository.AccountRepository
 import com.example.domain.repository.PlaybackController
+import com.example.domain.repository.LyricsRepository
 import com.example.domain.repository.SearchHistoryRepository
 import com.example.domain.repository.SocialRepository
 import com.example.domain.repository.TrackRepository
 import com.example.domain.usecase.AccountUseCases
 import com.example.domain.usecase.SearchHistoryUseCases
+import com.example.domain.usecase.LyricsUseCases
 import com.example.domain.usecase.SocialUseCases
 import com.example.domain.usecase.TrackUseCases
 import com.example.playback.AudioPlayerManager
@@ -57,6 +59,11 @@ object ApplicationModule {
         trackRepository: TrackRepository,
         accountRepository: AccountRepository,
     ): TrackUseCases = TrackUseCases(trackRepository, accountRepository)
+
+    @Provides
+    fun provideLyricsUseCases(
+        lyricsRepository: LyricsRepository,
+    ): LyricsUseCases = LyricsUseCases(lyricsRepository)
 
     @Provides
     fun provideSocialUseCases(

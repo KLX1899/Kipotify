@@ -12,11 +12,13 @@ import com.example.data.remote.KipotifyApiClient
 import com.example.data.remote.KipotifyApiService
 import com.example.data.remote.LanBackendDiscovery
 import com.example.data.repository.AccountRepositoryImpl
+import com.example.data.repository.LyricsRepositoryImpl
 import com.example.data.repository.SearchHistoryRepositoryImpl
 import com.example.data.repository.SocialRepositoryImpl
 import com.example.data.repository.TrackRepositoryImpl
 import com.example.domain.repository.AccountRepository
 import com.example.domain.repository.ConnectionRepository
+import com.example.domain.repository.LyricsRepository
 import com.example.domain.repository.SearchHistoryRepository
 import com.example.domain.repository.SocialRepository
 import com.example.domain.repository.TrackRepository
@@ -105,6 +107,12 @@ object DataModule {
         likedSongDao = likedSongDao,
         downloadedSongDao = downloadedSongDao,
     )
+
+    @Provides
+    @Singleton
+    fun provideLyricsRepository(
+        api: KipotifyApiService,
+    ): LyricsRepository = LyricsRepositoryImpl(api)
 
     @Provides
     @Singleton
